@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-//IEquality is mainly used for tracking if it's the same position, Icomparer for the Neighbours's distance for the HashSet in Dijkstra  specifically HashSet<NodePoint> unvisited 
+//IEquality is mainly used for tracking if it's the same position, Icomparer for the Neighbours's distance for the HashSet in aStar  specifically   PriorityQueue<NodePoint, float> openSet
 public class NodePoint : IEqualityComparer<Vector3>, IComparer<NodePoint>
 {
     public Vector3 Position { get; set; }
