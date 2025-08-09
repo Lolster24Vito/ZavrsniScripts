@@ -16,8 +16,9 @@ public class AdaptiveOpenScenesManager : MonoBehaviour
     float currentFPS;
     void Start()
     {
+        SetRefreshRateTo90();
         //set fps to 120
-        SetRefreshRateTo120();
+       // SetRefreshRateTo120();
         if (autoStablizeOpenScenes)
         {
 

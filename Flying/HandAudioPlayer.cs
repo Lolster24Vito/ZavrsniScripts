@@ -20,7 +20,7 @@ public class HandAudioPlayer : MonoBehaviour
     }
     void OnEnable()
     {
-        EventManager.StartListening("FlapDetected", OnFlapPlaySound);
+        GameEventsManager.Instance.OnFlapEvent+= OnFlapPlaySound;
     }
 
     private void OnFlapPlaySound(FlapEventDTO obj)
@@ -32,6 +32,6 @@ public class HandAudioPlayer : MonoBehaviour
 
     void OnDisable()
     {
-        EventManager.StopListening("FlapDetected", OnFlapPlaySound);
+        GameEventsManager.Instance.OnFlapEvent -= OnFlapPlaySound;
     }
 }

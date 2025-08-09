@@ -72,12 +72,12 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
 
     void OnEnable()
     {
-        EventManager.StartListening("FlapDetected", OnFlapDetected);
+        GameEventsManager.Instance.OnFlapEvent+= OnFlapDetected;
     }
 
     void OnDisable()
     {
-        EventManager.StopListening("FlapDetected", OnFlapDetected);
+        GameEventsManager.Instance.OnFlapEvent -= OnFlapDetected;
     }
     // For GLIDING detector
     private void GlidingOnCompliantBoneCount(int count) => compliantGlidingBones = count;

@@ -111,7 +111,7 @@ public class WingFlapDetectorBodyPoses : MonoBehaviour
             currentFlapEvent.FlapEndTime = Time.time;
 
             previousFlapEventDTO = currentFlapEvent;
-            EventManager.TriggerEvent("FlapDetected", currentFlapEvent);
+            GameEventsManager.Instance.TriggerFlapEvent(currentFlapEvent);
             currentFlapEvent = new FlapEventDTO();
         }
     }
