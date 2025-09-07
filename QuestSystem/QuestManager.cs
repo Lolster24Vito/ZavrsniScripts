@@ -37,6 +37,7 @@ public class QuestManager : MonoBehaviour
             {
                 quest.InstantiateCurrentQuestStep(this.transform);
             }
+            Debug.Log("INside QuestManager for loop for quest:" + quest.info.id);
             GameEventsManager.Instance.questEvents.QuestStateChanged(quest);
         }
     }
@@ -71,6 +72,7 @@ public class QuestManager : MonoBehaviour
             if (quest.state == QuestState.REQUIREMENTS_NOT_MET && CheckRequirementsMet(quest))
             {
                 ChangeQuestState(quest.info.id, QuestState.CAN_START);
+
             }
         }
     }
@@ -141,6 +143,7 @@ public class QuestManager : MonoBehaviour
         Quest quest = GetQuestById(id);
         quest.StoreQuestStepState(questStepState, stepIndex);
         ChangeQuestState(id, quest.state);
+        Debug.LogWarning("VITO QuestStepStateChanged" + " " + id);
     }
 
     private Quest GetQuestById(string id)
@@ -152,7 +155,7 @@ public class QuestManager : MonoBehaviour
         }
         return quest;
     }
-    private void OnApplicationQuit()
+    private void OnApplicationPause()
     {
         foreach (Quest quest in questMap.Values)
         {

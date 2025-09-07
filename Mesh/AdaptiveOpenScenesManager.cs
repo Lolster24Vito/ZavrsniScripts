@@ -6,7 +6,7 @@ public class AdaptiveOpenScenesManager : MonoBehaviour
 
     public TileManager tileManager;
 
-    public float checkInterval = 15.0f; // Time between FPS checks
+    public float checkInterval = 12f; // Time between FPS checks
     public int targetFPS = 72;
     public int targetFPSRange = 8;
     public int minOpenScenes = 4;
@@ -16,9 +16,10 @@ public class AdaptiveOpenScenesManager : MonoBehaviour
     float currentFPS;
     void Start()
     {
-        SetRefreshRateTo90();
+        SetRefreshRateTo72();
+        //SetRefreshRateTo90();
         //set fps to 120
-       // SetRefreshRateTo120();
+        // SetRefreshRateTo120();
         if (autoStablizeOpenScenes)
         {
 

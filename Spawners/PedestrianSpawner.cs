@@ -11,8 +11,8 @@ public class PedestrianSpawner : MonoBehaviour
 
 
 
-    private static int pedestrianNumberToSpawn = 10;
-    private static int carNumberToSpawn = 10;
+    private static int pedestrianNumberToSpawn = 5;
+    private static int carNumberToSpawn = 5;
 
 
     private Transform tileContainer;
@@ -95,7 +95,7 @@ public class PedestrianSpawner : MonoBehaviour
         for (int i = 0; i < toSpawnNumber; i++)
         {
             NodePoint randomPosition = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, currentTile);
-            Debug.Log($"VITO Spawned object  {entityType.ToString()}_{i}_{currentTile.x}_{currentTile.y}");
+          //  Debug.Log($"VITO Spawned object  {entityType.ToString()}_{i}_{currentTile.x}_{currentTile.y}");
 
             lastNode = randomPosition;
             //fallback if randomPosition is null or empty
@@ -113,7 +113,7 @@ public class PedestrianSpawner : MonoBehaviour
             Pedestrian pedestrianScript = spawnedObject.GetComponent<Pedestrian>();
             pedestrianScript.SetTile(currentTile);
             pedestrianScript.SetStartingNode(randomPosition);
-            Debug.Log($"VITO Spawned object's random position: {randomPosition.ToString()}");
+          //  Debug.Log($"VITO Spawned object's random position: {randomPosition.ToString()}");
         }
     }
 

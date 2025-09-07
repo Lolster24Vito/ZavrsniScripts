@@ -72,12 +72,39 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
 
     void OnEnable()
     {
-        GameEventsManager.Instance.OnFlapEvent+= OnFlapDetected;
+        GameEventsManager.Instance.OnFlapEvent += OnFlapDetected;
+        GameEventsManager.Instance.playerMovementEvents.onDisablePlayerMovement += DisablePlayerMovement;
+        GameEventsManager.Instance.playerMovementEvents.onEnablePlayerMovement += EnablePlayerMovement;
     }
+
+
+
 
     void OnDisable()
     {
         GameEventsManager.Instance.OnFlapEvent -= OnFlapDetected;
+        GameEventsManager.Instance.playerMovementEvents.onDisablePlayerMovement += DisablePlayerMovement;
+        GameEventsManager.Instance.playerMovementEvents.onEnablePlayerMovement += EnablePlayerMovement;
+
+    }
+    private void DisablePlayerMovement()
+    {
+        Debug.Log("Disabling player movement debug");
+        FreezePlayerRigidbodyPosition();
+    }
+
+    private void EnablePlayerMovement()
+    {
+        Debug.Log("Enabling player movement debug");
+        UnfreezePlayerRigidbodyPosition();
+    }
+    private void FreezePlayerRigidbodyPosition()
+    {
+        rb.constraints = RigidbodyConstraints.FreezeAll;
+    }
+    private void UnfreezePlayerRigidbodyPosition()
+    {
+        rb.constraints = RigidbodyConstraints.FreezeRotation;
     }
     // For GLIDING detector
     private void GlidingOnCompliantBoneCount(int count) => compliantGlidingBones = count;
@@ -343,7 +370,7 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
         }
     }
     //todo add events
-    
+
     public void OnTheCollisionWithFloor()
     {
         flapVelocity = 0f;
@@ -426,7 +453,7 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
         angleTargetSpeed = CalculateSpeedBasedOnAngle(direction);
 
         float returnAngleVelocity = flapVelocity;
-        
+
         //if previous value is lower than target speed reduce by multiplier else give responsive fast speed
         float differenceSpeeds = Mathf.Abs(returnAngleVelocity - angleTargetSpeed);
 
@@ -452,7 +479,7 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
         // Calculate dot products for 90 degrees (upward) and -90 degrees (downward)
         float dotValueUp = Vector3.Dot(direction, upDirection); // For flying upwards
         float dotValueDown = Vector3.Dot(direction, -upDirection); // For flying downwards
-        float dotValueForward = Vector3.Dot(direction, forwardDirection); // For flying in a straigth line
+   //     float dotValueForward = Vector3.Dot(direction, forwardDirection); // For flying in a straigth line
 
         //Dot product
         //1 if same
@@ -474,10 +501,10 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
             targetSpeed = speedSlowAngle;
         }
 
-        if (dotValueForward > 0.95f)
+      /*  if (dotValueForward > 0.95f)
         {
             targetSpeed = flapVelocity;
-        }
+        }*/
 
 
         return targetSpeed;
@@ -541,4 +568,5 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
     {
         return flapVelocity;
     }
+
 }

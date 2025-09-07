@@ -116,7 +116,7 @@ public class PedestrianDestinations : MonoBehaviour
         // Create a new CancellationTokenSource
         tokenSource = new CancellationTokenSource();
 
-        InitializeNeighboursAsync(tokenSource.Token);
+       InitializeNeighboursAsync(tokenSource.Token);
     }
     private async void InitializeNeighboursAsync(CancellationToken token)
     {

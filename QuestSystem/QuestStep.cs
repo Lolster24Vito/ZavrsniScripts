@@ -30,6 +30,7 @@ public abstract class QuestStep : MonoBehaviour
     }
     protected void ChangeState(string newState,string newStatus)
     {
+        Debug.Log("QuestStep.cs: in changeSTate:" + newState + " ...." + newStatus);
         GameEventsManager.Instance.questEvents.QuestStepStateChange(questId, stepIndex, new QuestStepState(newState,newStatus));
     }
     protected abstract void SetQuestStepState(string state);

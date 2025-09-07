@@ -14,7 +14,7 @@ public class WorldRecenterManager : MonoBehaviour
 
     public static WorldRecenterManager Instance { get; private set; }
     private Vector3 worldOffset = Vector3.zero;
-    private float recenterDistance = 6000f;
+   [SerializeField] private float recenterDistance = 1000f;
     private Vector3 lastOffset=Vector3.zero;
     private  Vector3 customWorldOffsetWithoutFirst = Vector3.zero;
 
@@ -29,6 +29,14 @@ public class WorldRecenterManager : MonoBehaviour
         }
 
         Instance = this;
+    }
+    private void OnEnable()
+    {
+        GameEventsManager.Instance.inputEvents.onQuestLogTogglePressed += RecenterWorld;
+    }
+    private void OnDisable()
+    {
+        GameEventsManager.Instance.inputEvents.onQuestLogTogglePressed -= RecenterWorld;
     }
     private void Start()
     {

@@ -31,7 +31,7 @@ public class TileManager : MonoBehaviour
     private Dictionary<Vector2Int, bool> loadedTiles = new Dictionary<Vector2Int, bool>();
     private Vector3 tileCenter;
     private string currentTileScene; // Current tile the player is on
-  [SerializeField]  private int maxOpenScenes=7;
+  [SerializeField]  private int maxOpenScenes=4;
 
     // track the offset from the time  it is spawned  and use that for the pedestrian calculation of the path  because of world relocation due to floating origin point.
 

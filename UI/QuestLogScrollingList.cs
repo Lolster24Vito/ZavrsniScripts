@@ -13,9 +13,11 @@ public class QuestLogScrollingList : MonoBehaviour
     [SerializeField] private GameObject questLogButtonPrefab;
 
     private Dictionary<string, QuestLogButton> idToButtonMap = new Dictionary<string, QuestLogButton>();
+
+    /*
     private void Start()
      {
-         for (int i = 0; i < 20; i++)
+         for (int i = 0; i < 4; i++)
         {
             QuestInfoSO questInfoTest = ScriptableObject.CreateInstance<QuestInfoSO>();
             questInfoTest.id = "test_" + i;
@@ -23,10 +25,13 @@ public class QuestLogScrollingList : MonoBehaviour
             questInfoTest.questStepPrefabs = new GameObject[0];
             Quest quest = new Quest(questInfoTest);
 
-            QuestLogButton questLogButton = CreateButtonIfNotExists(quest);
+            QuestLogButton questLogButton = CreateButtonIfNotExists(quest,(bool e)=> {
+                Debug.Log("Selected func from start:" + questInfoTest.displayName+" "+e);
+                });
             // set the debug info on the button via a named method (no lambda)
             if (i == 0)
             {
+                questLogButton.toggle.isOn = false;
                 // NOTE: depending on the Toggle implementation you might want to call
                 // a method instead of directly setting isOn — this is for testing only.
                 //check if this triggers event
@@ -37,24 +42,19 @@ public class QuestLogScrollingList : MonoBehaviour
                 //   questLogButton.button.Select();
             }
         }
-    }
+    }*/
 
-    private static UnityAction debugMethodForToggle(QuestInfoSO questInfoTest)
-    {
-        return () =>
-        {
-            Debug.Log("SELECTED: " + questInfoTest.displayName);
-        };
-    }
 
-    public QuestLogButton CreateButtonIfNotExists(Quest quest)
+
+    public QuestLogButton CreateButtonIfNotExists(Quest quest,UnityAction selectAction)
     {
+        Debug.Log("INside CreateButtonIfNotExists");
         QuestLogButton questLogButton = null;
         // only create the button if we haven't seen this quest id before
         if (!idToButtonMap.ContainsKey(quest.info.id))
         {
             Debug.Log("Vito creating quest button:" + quest.info.id);
-            questLogButton = InstantiateQuestLogButton(quest);
+            questLogButton = InstantiateQuestLogButton(quest, selectAction);
         }
         else
         {
@@ -63,22 +63,15 @@ public class QuestLogScrollingList : MonoBehaviour
         return questLogButton;
     }
 
-    private QuestLogButton InstantiateQuestLogButton(Quest quest)
+    private QuestLogButton InstantiateQuestLogButton(Quest quest,UnityAction selectAction)
     {
-        // create the button
         QuestLogButton questLogButton = Instantiate(
             questLogButtonPrefab,
             contentParent.transform).GetComponent<QuestLogButton>();
-        // game object name in the scene
         questLogButton.gameObject.name = quest.info.id + "_button";
-        // initialize and set up function for when the button is selected
-        //toggle = questLogButton.GetComponent<QuestLogButton>();
-        //VITO todo doubt this is important RectTransform buttonRectTransform = questLogButton.GetComponent<RectTransform>();
-        questLogButton.Initialize(quest.info.displayName
-        );
-        //VITO TODO  UpdateScrolling(buttonRectTransform);
 
-        // add to map to keep track of the new button
+        questLogButton.Initialize(quest.info.displayName, selectAction);
+
         idToButtonMap[quest.info.id] = questLogButton;
         return questLogButton;
     }

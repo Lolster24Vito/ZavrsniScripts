@@ -2,19 +2,26 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
-public  class GameEventsManager: MonoBehaviour
+public class GameEventsManager : MonoBehaviour
 {
     public static GameEventsManager Instance { get; private set; }
 
     public event Action<FlapEventDTO> OnFlapEvent;
-    public BreadEvents breadEvents;
     //todo experienceEvents and stuff??
     //redo experience to seperate class for now it's just a number here
     public int experience;
     public QuestEvents questEvents;
-    public event Action OnSubmitButtonPressed;
-    public event Action onQuestLogTogglePressed;
+    public BreadEvents breadEvents;
+    //playerMovementEvents ->EnableMovement and DisableMovement.
+    //InputEvents -> onSubmitButton, OnQuestLogButton
+    public PlayerMovementEvents playerMovementEvents;
+    public InputEvents inputEvents;
+    public DialogueEvents dialogueEvents;
+   // public event Action OnSubmitButtonPressed;
+  //  public event Action OnQuestLogTogglePressed;
+
 
     private void Awake()
     {
@@ -26,17 +33,19 @@ public  class GameEventsManager: MonoBehaviour
 
         breadEvents = new BreadEvents();
         questEvents = new QuestEvents();
+        playerMovementEvents = new PlayerMovementEvents();
+        inputEvents = new InputEvents();
+        dialogueEvents = new DialogueEvents();
     }
 
     private void Update()
     {
         //the time has cum.
         //todo this is debug remove and replace with oculus controlls
-        if (Input.GetKeyDown(KeyCode.Space))
+        /*if (Input.GetKeyDown(KeyCode.Space))
         {
             if (OnSubmitButtonPressed != null)
             {
-                Debug.Log("Space was pressed");
                 OnSubmitButtonPressed();
             }
         }
@@ -44,17 +53,51 @@ public  class GameEventsManager: MonoBehaviour
         {
             if (onQuestLogTogglePressed != null)
             {
-                Debug.Log("J was pressed");
-                onQuestLogTogglePressed();
+
             }
+        }*/
+        //y button
+        if (Input.GetKeyDown(KeyCode.J))
+        {
+            Debug.Log("J was pressed");
+            inputEvents.QuestLogTogglePressed();
+        }
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            Debug.Log("Space was pressed");
+            inputEvents.SubmitButtonPressed();
+        }
+        if (OVRInput.GetDown(OVRInput.Button.PrimaryHandTrigger))
+        {
+            Debug.Log("Space was pressed");
+            inputEvents.SubmitButtonPressed();
+        }
+        if (OVRInput.GetDown(OVRInput.Button.SecondaryHandTrigger))
+        {
+            Debug.Log("Space was pressed");
+            inputEvents.SubmitButtonPressed();
+        }
+        if (OVRInput.GetDown(OVRInput.Button.Four))
+        {
+            //y button
+            Debug.Log("J was pressed");
+            inputEvents.QuestLogTogglePressed();
+        }
+        if (OVRInput.GetDown(OVRInput.Button.Two))
+        {
+            //b button
+            Debug.Log("J was pressed");
+            inputEvents.QuestLogTogglePressed();
         }
     }
-    public  void TriggerFlapEvent(FlapEventDTO eventData)
+    public void TriggerFlapEvent(FlapEventDTO eventData)
     {
         if (OnFlapEvent != null)
         {
             OnFlapEvent(eventData);
         }
     }
-    
+
+   
+
 }
