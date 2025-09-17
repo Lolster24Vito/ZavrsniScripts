@@ -57,6 +57,9 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
 
     [SerializeField] private float flapAngleSlowDownStrength = 4f;
     [SerializeField] private float flapAngleSpeedUpStrength = 7.5f;
+
+    [SerializeField] private float stationaryHorizontalDecay = 1.53f; // higher = faster decay (tune)
+
     public float maxAllowedFlapVelocity = 900f;  // Maximum allowed velocity to avoid unrealistic spikes
 
     public FlyingStatesEnum CurrentGlidePose { get => _currentGlidePose; set => _currentGlidePose = value; }
@@ -69,6 +72,13 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
     private float angleTargetSpeed;
 
     FlapEventDTO lastFlap = null;
+
+    // blending state for smooth transition into GLIDING
+    private bool isBlendingFlapVelocity = false;
+    private float blendStartFlapVelocity = 0f;
+    private float blendTargetFlapVelocity = 0f;
+    private float blendTimer = 0f;
+    [SerializeField] private float glideEntryBlendTime = 3; // tune 0.15..0.4 for feel
 
     void OnEnable()
     {
@@ -83,8 +93,8 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
     void OnDisable()
     {
         GameEventsManager.Instance.OnFlapEvent -= OnFlapDetected;
-        GameEventsManager.Instance.playerMovementEvents.onDisablePlayerMovement += DisablePlayerMovement;
-        GameEventsManager.Instance.playerMovementEvents.onEnablePlayerMovement += EnablePlayerMovement;
+        GameEventsManager.Instance.playerMovementEvents.onDisablePlayerMovement -= DisablePlayerMovement;
+        GameEventsManager.Instance.playerMovementEvents.onEnablePlayerMovement -= EnablePlayerMovement;
 
     }
     private void DisablePlayerMovement()
@@ -193,6 +203,23 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
         FlyingStatesEnum highestPose = DetermineHighestFlapPose();
         if (highestPose != _currentGlidePose)
         {
+            //TODO REDO
+            // start smooth clamping when going STATIONARY -> GLIDING
+            if (highestPose == FlyingStatesEnum.GLIDING && _currentGlidePose == FlyingStatesEnum.STATIONARY)
+            {
+                // current horizontal speed
+                float horizontalSpeed = new Vector3(rb.velocity.x, 0f, rb.velocity.z).magnitude;
+
+                // target: don't let flapVelocity be higher than actual horizontal speed
+                float target = Mathf.Min(flapVelocity, horizontalSpeed);
+
+                // prepare blend
+                isBlendingFlapVelocity = true;
+                blendStartFlapVelocity = flapVelocity;
+                blendTargetFlapVelocity = target;
+                blendTimer = 0f;
+            }
+
             switch (highestPose)
             {
 
@@ -224,18 +251,33 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
 
 
         flapVelocity = GetAngleSpeedOfFlapVelocity(averageDirection);
+        //todo simplfy
+        if (isBlendingFlapVelocity)
+        {
+            blendTimer += Time.deltaTime;
+            float t = Mathf.Clamp01(blendTimer / glideEntryBlendTime);
+            // linear lerp; use SmoothStep for easing if you prefer
+            flapVelocity = Mathf.Lerp(blendStartFlapVelocity, blendTargetFlapVelocity, t);
+
+            if (t >= 1f)
+            {
+                isBlendingFlapVelocity = false;
+            }
+        }
         //ANGLE BASED VELOCITY END
         appliedForce = GetVelocity(averageDirection);
         Vector3 velocityChange = appliedForce - rb.velocity;
-        if (flapVelocity != 0f)
-        {
+        //if (flapVelocity > 0f)
+        //{
             rb.AddForce(velocityChange, ForceMode.VelocityChange);
-        }
+        //}
+       
 
     }
 
     void OnFlapDetected(FlapEventDTO eventData)
     {
+        isBlendingFlapVelocity = false;
         isOnFloor = false;
         lastFlap = eventData;
         // Handle different flap types by triggering the appropriate state changes and movement
@@ -516,9 +558,14 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
 
         if (_currentGlidePose.Equals(FlyingStatesEnum.STATIONARY))
         {
-            Vector3 normalVelocity = (averageDirection * flapVelocity);
+            // Decay horizontal velocity gradually instead of snapping to zero.
+            Vector3 horizontalVel = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+             Vector3 decayedHorizontal = Vector3.Lerp(horizontalVel, Vector3.zero, Mathf.Clamp01(Time.deltaTime * stationaryHorizontalDecay));
+
+            //  Vector3 normalVelocity = (averageDirection * flapVelocity);
             float yVelocity = rb.velocity.y - (Time.deltaTime * speedStationaryGravity);
-            return new Vector3(normalVelocity.x, yVelocity, normalVelocity.z);
+            return new Vector3(decayedHorizontal.x, yVelocity, decayedHorizontal.z);
+            //return Vector3.zero;
         }
         if (_currentGlidePose.Equals(FlyingStatesEnum.FLYING_SLOW))
         {
@@ -529,6 +576,12 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
         else
         {
             rb.drag = 0f;
+        }
+
+        if (flapVelocity < 0.1f)
+        {
+            float yVelocity = rb.velocity.y - (Time.deltaTime * speedStationaryGravity);
+            return new Vector3(0f,yVelocity,0f);
         }
         return averageDirection * (flapVelocity);
     }

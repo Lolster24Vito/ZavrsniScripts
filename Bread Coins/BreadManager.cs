@@ -41,6 +41,7 @@ public class BreadManager : MonoBehaviour
     {
         currentBreadAmount += breadAmount;
         GameEventsManager.Instance.breadEvents.BreadChange(currentBreadAmount);
+        GameEventsManager.Instance.breadEvents.BreadCollected();
     }
 
 }

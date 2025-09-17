@@ -57,7 +57,7 @@ public class Pedestrian : MonoBehaviour
     private List<Vector3> getPositionNodePointTransformNeighbourPoints = new List<Vector3>();
     bool recenteredOnce = false;
     private Vector3 spawnRecenterOffset;
-    private Vector2Int tile = new Vector2Int(-1, -1);
+   [SerializeField] private Vector2Int tile = new Vector2Int(-1, -1);
     private Transform cachedTransform;
     private Vector3 targetWithOffsetWithPlayerY;
 
@@ -97,6 +97,7 @@ public class Pedestrian : MonoBehaviour
 
     private void OnEnable()
     {
+        if(!targetWithOffset.Equals(Vector3.zero))
         transform.position = targetWithOffset;
     }
 
@@ -129,8 +130,11 @@ public class Pedestrian : MonoBehaviour
 
         if (!firstPathFindCalled && !findingPath && PedestrianDestinations.Instance.IsPathFindingReady())
         {
-            findingPath = true;
-            InitializePathfinding();
+            if (PedestrianDestinations.Instance.IsPathFindingReady())
+            {
+                findingPath = true;
+                InitializePathfinding();
+            }
             return;
         }
         // Offset position by moving slightly in the rightward direction when colliding with slower entity's,and in general.
@@ -209,8 +213,11 @@ public class Pedestrian : MonoBehaviour
         if(currentStartNodePoint==null)
         currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);
 
-        cachedTransform.position = currentStartNodePoint.Position;
-
+        // Only set position when we actually found a valid node
+        if (currentStartNodePoint != null)
+        {
+            cachedTransform.position = currentStartNodePoint.Position;
+        }
         Debug.Log("Now really started pedestrian");
         if (isEndPointOnSpawnSet)
         {

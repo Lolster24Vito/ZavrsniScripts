@@ -56,7 +56,45 @@ public class GameEventsManager : MonoBehaviour
 
             }
         }*/
-        //y button
+
+        //TODO FINISH THIS
+        //  bool leftHandTriggerDown = GetDown(Button.PrimaryHandTrigger);
+        // bool rightHandTriggerDown = GetDown(Button.SecondaryHandTrigger);
+        //bool leftHandTriggerUp = GetUp(Button.PrimaryHandTrigger);
+        //bool rightHandTriggerUp = GetUp(Button.SecondaryHandTrigger);
+
+        bool leftHandTriggerDown = OVRInput.Get(OVRInput.Button.PrimaryHandTrigger);
+        bool rightHandTriggerDown = OVRInput.Get(OVRInput.Button.SecondaryHandTrigger);
+        bool leftHandTriggerUp = OVRInput.GetUp(OVRInput.Button.PrimaryHandTrigger);
+        bool rightHandTriggerUp = OVRInput.GetUp(OVRInput.Button.SecondaryHandTrigger);
+        //shoot trigger buttons
+        if (leftHandTriggerDown && rightHandTriggerDown)
+        {
+            inputEvents.BothShootButtonPressedDown();
+        }
+        else if (leftHandTriggerDown)
+        {
+            inputEvents.LeftShootButtonPressedDown();
+        }
+        else if (rightHandTriggerDown)
+        {
+            inputEvents.RightShootButtonPressedDown();
+        }
+
+        if (leftHandTriggerUp && rightHandTriggerUp)
+        {
+            inputEvents.BothShootButtonPressedUp();
+        }
+        else if (leftHandTriggerUp)
+        {
+            inputEvents.LeftShootButtonPressedUp();
+        }
+        else if (rightHandTriggerUp)
+        {
+            inputEvents.RightShootButtonPressedUp();
+        }
+
+        //UI buttons
         if (Input.GetKeyDown(KeyCode.J))
         {
             Debug.Log("J was pressed");
@@ -72,18 +110,23 @@ public class GameEventsManager : MonoBehaviour
             Debug.Log("Space was pressed");
             inputEvents.SubmitButtonPressed();
         }
-        if (OVRInput.GetDown(OVRInput.Button.SecondaryHandTrigger))
+        if (OVRInput.GetDown(OVRInput.Button.One))
         {
             Debug.Log("Space was pressed");
             inputEvents.SubmitButtonPressed();
         }
-        if (OVRInput.GetDown(OVRInput.Button.Four))
+        if (OVRInput.GetDown(OVRInput.Button.Three))
+        {
+            Debug.Log("Space was pressed");
+            inputEvents.SubmitButtonPressed();
+        }
+        if (OVRInput.GetDown(OVRInput.Button.Four)) //y button left controller upper button
         {
             //y button
             Debug.Log("J was pressed");
             inputEvents.QuestLogTogglePressed();
         }
-        if (OVRInput.GetDown(OVRInput.Button.Two))
+        if (OVRInput.GetDown(OVRInput.Button.Two)) //b button right controller upper button
         {
             //b button
             Debug.Log("J was pressed");

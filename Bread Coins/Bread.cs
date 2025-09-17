@@ -8,12 +8,12 @@ public class Bread : MonoBehaviour
     [Header("Config")]
     [SerializeField] private float respawnTimeSeconds = 8;
     [SerializeField] private int breadGained = 1;
-    
-    private MeshRenderer visual;
+
+    [SerializeField] private GameObject visual;
     private SphereCollider sphereCollider;
     private void Awake()
     {
-        visual = GetComponent<MeshRenderer>();
+       // visual = GetComponent<MeshRenderer>();
         sphereCollider = GetComponent<SphereCollider>();
     }
 
@@ -28,7 +28,7 @@ public class Bread : MonoBehaviour
     private void CollectBread()
     {
         sphereCollider.enabled = false;
-        visual.enabled = false;
+        visual.SetActive(false);
         GameEventsManager.Instance.breadEvents.BreadGained(breadGained);
         GameEventsManager.Instance.breadEvents.BreadCollected();
         StopAllCoroutines();
@@ -38,6 +38,6 @@ public class Bread : MonoBehaviour
     {
         yield return new WaitForSeconds(respawnTimeSeconds);
         sphereCollider.enabled = true;
-        visual.enabled=true;
+        visual.SetActive(true);
     }
 }

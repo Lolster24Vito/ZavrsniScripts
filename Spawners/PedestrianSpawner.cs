@@ -11,7 +11,7 @@ public class PedestrianSpawner : MonoBehaviour
 
 
 
-    private static int pedestrianNumberToSpawn = 5;
+    private static int pedestrianNumberToSpawn = 10;
     private static int carNumberToSpawn = 5;
 
 

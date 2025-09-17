@@ -39,11 +39,12 @@ public class Ragdoll : MonoBehaviour
         DisableRagdoll();
     }
 
-    public void TriggerRagdoll(float force, Vector3 contactPoint, Vector3 aimingDirection)
+    public Transform TriggerRagdoll(float force, Vector3 contactPoint, Vector3 aimingDirection)
     {
         EnableRagdoll();
         Rigidbody hitRigidBody = ragdollRigidbodies.OrderBy(rb => Vector3.Distance(rb.position, contactPoint)).First();
         hitRigidBody.AddForceAtPosition(force * aimingDirection, contactPoint, ForceMode.Impulse);
+        return hitRigidBody.transform;
     }
 
     void Update()
