@@ -57,10 +57,11 @@ public class PedestrianSpawner : MonoBehaviour
 
     }
     // Start is called before the first frame update
-    public void Spawn() {
+    public void Spawn()
+    {
         StartCoroutine(SpawnWithWait());
-            }
-   private IEnumerator SpawnWithWait()
+    }
+    private IEnumerator SpawnWithWait()
     {
         yield return new WaitForSeconds(3.5f);
         CreateTileContainer();
@@ -95,7 +96,7 @@ public class PedestrianSpawner : MonoBehaviour
         for (int i = 0; i < toSpawnNumber; i++)
         {
             NodePoint randomPosition = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, currentTile);
-          //  Debug.Log($"VITO Spawned object  {entityType.ToString()}_{i}_{currentTile.x}_{currentTile.y}");
+            //  Debug.Log($"VITO Spawned object  {entityType.ToString()}_{i}_{currentTile.x}_{currentTile.y}");
 
             lastNode = randomPosition;
             //fallback if randomPosition is null or empty
@@ -108,12 +109,12 @@ public class PedestrianSpawner : MonoBehaviour
                 Debug.Log($"VITO USING LAST NODE FALLBACK1 for {entityType.ToString()}_{i}_{currentTile.x}_{currentTile.y}");
 
             }
-            GameObject spawnedObject = Instantiate(toSpawn, randomPosition.Position- worldOffset, Quaternion.identity, tileContainer);
+            GameObject spawnedObject = Instantiate(toSpawn, randomPosition.Position - worldOffset, Quaternion.identity, tileContainer);
             spawnedObject.name = $"{entityType.ToString()}_{i}_{currentTile.x}_{currentTile.y}";
             Pedestrian pedestrianScript = spawnedObject.GetComponent<Pedestrian>();
             pedestrianScript.SetTile(currentTile);
             pedestrianScript.SetStartingNode(randomPosition);
-          //  Debug.Log($"VITO Spawned object's random position: {randomPosition.ToString()}");
+            //  Debug.Log($"VITO Spawned object's random position: {randomPosition.ToString()}");
         }
     }
 
@@ -143,13 +144,14 @@ public class PedestrianSpawner : MonoBehaviour
         {
             Destroy(tileContainer.gameObject);
         }
-        if (isActive&& tileContainer.childCount == 0)
+        if (isActive && tileContainer.childCount == 0)
         {
-         SpawnEntities();
+            SpawnEntities();
         }
     }
-    public static int GetPedestrianNumberToSpawn() { 
-        return pedestrianNumberToSpawn; 
+    public static int GetPedestrianNumberToSpawn()
+    {
+        return pedestrianNumberToSpawn;
     }
 
 }
