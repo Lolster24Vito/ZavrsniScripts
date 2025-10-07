@@ -78,7 +78,7 @@ public class NpcPoolManager : MonoBehaviour
 
     private GameObject CreatePedestrian()
     {
-        GameObject spawnedPedestrian = Instantiate(pedestrianPrefab);
+        GameObject spawnedPedestrian = Instantiate(pedestrianPrefab,transform);
         spawnedPedestrian.SetActive(false);
         return spawnedPedestrian;
         //ON GET spawnedObject.name = $"{entityType.ToString()}_{i}_{currentTile.x}_{currentTile.y}";
@@ -99,7 +99,11 @@ public class NpcPoolManager : MonoBehaviour
     }
     private void OnTakeFromPedestrianPool(GameObject pedestrian)
     {
-        if (pedestrian == null) return;
+        if (pedestrian == null)
+        {
+            return;
+        }
+//        ActivateFromPool()
         pedestrian.SetActive(true);
     }
     private void OnTakeFromCarPool(GameObject car)
@@ -111,14 +115,15 @@ public class NpcPoolManager : MonoBehaviour
     {
         if (pedestrian == null) return;
         // Reset state (e.g., stop movement, reset health)
-       // pedestrian.GetComponent<Pedestrian>().ResetForPool();
-       // pedestrian.SetActive(false);
+        pedestrian.transform.SetParent(transform);
+        pedestrian.GetComponent<Pedestrian>().ResetForPool();
+        pedestrian.SetActive(false);
     }
     private void OnReturnToCarPool(GameObject car)
     {
         if (car == null) return;
         // Reset state
-    //    car.GetComponent<Pedestrian>().ResetForPool();
-     //   car.SetActive(false);
+        car.GetComponent<Pedestrian>().ResetForPool();
+        car.SetActive(false);
     }
 }

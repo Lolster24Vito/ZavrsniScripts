@@ -27,7 +27,7 @@ public class Ragdoll : MonoBehaviour
     private float timeToWakeUp = 0f;
     private RagdollState ragdollState;
 
-    void Start()
+    void Awake()
     {
         ragdollRigidbodies = GetComponentsInChildren<Rigidbody>();
         animator = GetComponent<Animator>();
@@ -126,5 +126,10 @@ public class Ragdoll : MonoBehaviour
             ragdollState = RagdollState.Walking;
             pedestrian.enabled = true;
         }
+    }
+    //this is used to reset the ragdoll state when pooling.
+    public void ResetRagdoll()
+    {
+        DisableRagdoll();
     }
 }

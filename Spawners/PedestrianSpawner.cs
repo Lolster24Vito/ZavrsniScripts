@@ -12,7 +12,7 @@ public class PedestrianSpawner : MonoBehaviour
 
 
     private static int pedestrianNumberToSpawn = 10;
-    private static int carNumberToSpawn = 5;
+    private static int carNumberToSpawn = 10;
 
 
     private Transform tileContainer;
@@ -93,6 +93,7 @@ public class PedestrianSpawner : MonoBehaviour
         {
             toSpawnNumber = carNumberToSpawn;
         }
+
         for (int i = 0; i < toSpawnNumber; i++)
         {
             NodePoint randomPosition = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, currentTile);
@@ -109,11 +110,30 @@ public class PedestrianSpawner : MonoBehaviour
                 Debug.Log($"VITO USING LAST NODE FALLBACK1 for {entityType.ToString()}_{i}_{currentTile.x}_{currentTile.y}");
 
             }
-            GameObject spawnedObject = Instantiate(toSpawn, randomPosition.Position - worldOffset, Quaternion.identity, tileContainer);
-            spawnedObject.name = $"{entityType.ToString()}_{i}_{currentTile.x}_{currentTile.y}";
+            // Get from pool (this activates the object via NpcPoolManager)
+            GameObject spawnedObject = entityType == EntityType.Pedestrian
+                ? NpcPoolManager.Instance.GetPedestrian()
+                : NpcPoolManager.Instance.GetCar();
+
+            //GameObject spawnedObject = NpcPoolManager.Instance.GetPedestrian();
             Pedestrian pedestrianScript = spawnedObject.GetComponent<Pedestrian>();
-            pedestrianScript.SetTile(currentTile);
-            pedestrianScript.SetStartingNode(randomPosition);
+            pedestrianScript.ActivateFromPool(
+                randomPosition.Position - worldOffset,
+                randomPosition,
+                currentTile
+            );
+        
+                            pedestrianScript.SpawnGroup = true;
+
+
+            //old code
+            //      spawnedObject.transform.position = randomPosition.Position - worldOffset;
+            spawnedObject.transform.parent = tileContainer;
+           // GameObject spawnedObject = Instantiate(toSpawn, randomPosition.Position - worldOffset, Quaternion.identity, tileContainer);
+            spawnedObject.name = $"{entityType.ToString()}_{i}_{currentTile.x}_{currentTile.y}";
+      //      Pedestrian pedestrianScript = spawnedObject.GetComponent<Pedestrian>();
+       //     pedestrianScript.SetTile(currentTile);
+         //   pedestrianScript.SetStartingNode(randomPosition);
             //  Debug.Log($"VITO Spawned object's random position: {randomPosition.ToString()}");
         }
     }
@@ -142,7 +162,8 @@ public class PedestrianSpawner : MonoBehaviour
         isActive = playerTile == currentTile;
         if (!isActive)
         {
-            Destroy(tileContainer.gameObject);
+            ReturnAllNpcsToPool();
+            //Destroy(tileContainer.gameObject);
         }
         if (isActive && tileContainer.childCount == 0)
         {
@@ -153,5 +174,37 @@ public class PedestrianSpawner : MonoBehaviour
     {
         return pedestrianNumberToSpawn;
     }
+    private void ReturnAllNpcsToPool()
+    {
+        if (tileContainer == null) return;
 
+        // Create a list to avoid modification during iteration
+        List<Transform> children = new List<Transform>();
+        foreach (Transform child in tileContainer)
+        {
+            children.Add(child);
+        }
+
+        foreach (Transform child in children)
+        {
+            Pedestrian pedestrian = child.GetComponent<Pedestrian>();
+            if (pedestrian != null)
+            {
+                // REPARENT to NpcPoolManager before releasing
+                child.SetParent(NpcPoolManager.Instance.transform);
+
+                if (pedestrian.entityType == EntityType.Pedestrian)
+                {
+                    NpcPoolManager.Instance.ReleasePedestrian(child.gameObject);
+                }
+                else if (pedestrian.entityType == EntityType.Car)
+                {
+                    NpcPoolManager.Instance.ReleaseCar(child.gameObject);
+                }
+            }
+        }
+
+        // Now tileContainer should be empty
+        Debug.Log($"Returned {children.Count} NPCs to pool from tile {currentTile}");
+    }
 }

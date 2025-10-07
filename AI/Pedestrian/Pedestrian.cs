@@ -25,7 +25,7 @@ public class Pedestrian : MonoBehaviour
     [SerializeField] private List<Vector3> groupNextPath = new List<Vector3>();
     private List<Pedestrian> groupWithSamePath = new List<Pedestrian>();
 
-    private bool findingPath = false;
+    public bool findingPath = false;
     // Offset position by moving slightly in the right local direction when close(on trigger enter) by faster object
     private Vector3 offset;
     private Vector3 targetWithOffset;
@@ -56,8 +56,7 @@ public class Pedestrian : MonoBehaviour
     private CancellationTokenSource pathfindingCancellationTokenSource;
     private List<Vector3> getPositionNodePointTransformNeighbourPoints = new List<Vector3>();
     bool recenteredOnce = false;
-    private Vector3 spawnRecenterOffset;
-   [SerializeField] private Vector2Int tile = new Vector2Int(-1, -1);
+    [SerializeField] private Vector2Int tile = new Vector2Int(-1, -1);
     private Transform cachedTransform;
     private Vector3 targetWithOffsetWithPlayerY;
 
@@ -66,6 +65,7 @@ public class Pedestrian : MonoBehaviour
     [SerializeField] private float pathfindingCooldown = 1f;
     private float lastPathfindingTime = 0f;
 
+    private CharacterController characterController;
     public void SetTile(Vector2Int setTile)
     {
         tile = setTile;
@@ -80,14 +80,14 @@ public class Pedestrian : MonoBehaviour
     }
     protected virtual void Start()
     {
-        npcCount++;
+        characterController = GetComponent<CharacterController>();
         randomGroupNumber = UnityEngine.Random.Range(1, maxGroupNumber);
         float randomSpeedOffset = UnityEngine.Random.Range(randomSpeedMinimumOffset, randomSpeedMaximumOffset);
         moveSpeed += randomSpeedOffset;
         currentRightOffset = localRightDirectionOffsetStrength;
         currentWorldRecenterOffset = Vector3.zero;
-        spawnRecenterOffset = WorldRecenterManager.Instance.GetRecenterOffset();
-        WorldRecenterManager.OnWorldRecentered += SetToNewestRecenterOffset;
+        //this was removed uncomented unlined in this version
+        //WorldRecenterManager.OnWorldRecentered += SetToNewestRecenterOffset;
     }
 
     internal void SetStartingNode(NodePoint randomPosition)
@@ -97,21 +97,32 @@ public class Pedestrian : MonoBehaviour
 
     private void OnEnable()
     {
-        if(!targetWithOffset.Equals(Vector3.zero))
-        transform.position = targetWithOffset;
+        npcCount++;
+        //new code this could be sus:
+        WorldRecenterManager.OnWorldRecentered += SetToNewestRecenterOffset;
+
+
+        if (!targetWithOffset.Equals(Vector3.zero))
+            SetPositionAndTeleport(targetWithOffset); // MODIFIED
     }
 
     private void OnDisable()
     {
+        WorldRecenterManager.OnWorldRecentered -= SetToNewestRecenterOffset;
         npcCount--;
+        // Cancel any ongoing pathfinding when disabled
+        pathfindingCancellationTokenSource?.Cancel();
+        pathfindingCancellationTokenSource?.Dispose();
+        pathfindingCancellationTokenSource = null;
     }
 
     private void OnDestroy()
     {
-        WorldRecenterManager.OnWorldRecentered -= SetToNewestRecenterOffset;
+        //new code uncommented
+        //  WorldRecenterManager.OnWorldRecentered -= SetToNewestRecenterOffset;
 
-        pathfindingCancellationTokenSource?.Cancel();
-        npcCount--;
+        //     pathfindingCancellationTokenSource?.Cancel();
+        //   npcCount--;
 
 
     }
@@ -127,12 +138,35 @@ public class Pedestrian : MonoBehaviour
     }
     protected virtual void FixedUpdate()
     {
+        //I HATE THIS CODE
+        /*
+        if (groupSpawned)
+        {
+            // Group members only move using the path they were given
+            if (firstPathFindCalled && path.Count > 0)
+            {
+                // Calculate targetWithOffset for group members
+                offset = cachedTransform.right * currentRightOffset;
+                offset.y = 0f;
+                targetWithOffset = currentTargetDestination + offset;
+
+                // Apply tile offset if needed
+                if (TileManager.TryGetOffset(tile, out tileManagerOffset))
+                {
+                    targetWithOffset -= (WorldRecenterManager.Instance.GetCustomWorldOffsetWithoutFirst()) - tileManagerOffset;
+                }
+
+                MoveTowardsTarget();
+            }
+            return;
+        }
+        */
+        //I HATE THIS CODE END
 
         if (!firstPathFindCalled && !findingPath && PedestrianDestinations.Instance.IsPathFindingReady())
         {
             if (PedestrianDestinations.Instance.IsPathFindingReady())
             {
-                findingPath = true;
                 InitializePathfinding();
             }
             return;
@@ -142,9 +176,9 @@ public class Pedestrian : MonoBehaviour
         offset.y = 0f;
         targetWithOffset = currentTargetDestination + offset;
 
-       if( TileManager.TryGetOffset(tile, out tileManagerOffset))
+        if (TileManager.TryGetOffset(tile, out tileManagerOffset))
         {
-            targetWithOffset -=  (WorldRecenterManager.Instance.GetCustomWorldOffsetWithoutFirst())- tileManagerOffset;
+            targetWithOffset -= (WorldRecenterManager.Instance.GetCustomWorldOffsetWithoutFirst()) - tileManagerOffset;
         }
         else
         {
@@ -152,8 +186,11 @@ public class Pedestrian : MonoBehaviour
         }
 
 
-        if (pathListIndex == 0) cachedTransform.position = targetWithOffset;
-
+        if (pathListIndex == 0)
+        {
+            // ORIGINAL: cachedTransform.position = targetWithOffset;
+            SetPositionAndTeleport(targetWithOffset); // MODIFIED
+        }
         // Check if the pedestrian has reached the destination
         targetWithOffsetWithPlayerY.Set(targetWithOffset.x, cachedTransform.position.y, targetWithOffset.z);
         if (Vector3.Distance(cachedTransform.position, targetWithOffsetWithPlayerY) < minDistanceForCompletion)
@@ -171,16 +208,19 @@ public class Pedestrian : MonoBehaviour
                 {
                     path.Clear();
                     path.AddRange(groupNextPath);
-                    cachedTransform.position = path[0];
+                    //    cachedTransform.position = path[0];
+                    SetPositionAndTeleport(path[0]); // MODIFIED
                     groupNextPath.Clear();
                     pathListIndex = 0;
                     return;
                 }
                 if (pathFoundCount > 5)
                 {
-                    currentStartNodePoint = PedestrianDestinations.Instance.GetRandomNodePoint(entityType,tile);
-                    cachedTransform.position = currentStartNodePoint.Position;
-                    currentEndTargetDestination = PedestrianDestinations.Instance.GetRandomNodePoint(entityType,tile);
+                    currentStartNodePoint = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, tile);
+                   // cachedTransform.position = currentStartNodePoint.Position;
+                    SetPositionAndTeleport(currentStartNodePoint.Position); // MODIFIED
+
+                    currentEndTargetDestination = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, tile);
                     Debug.Log($"VITO object {gameObject.name} found path over 5 times");
                     findingPath = true;
                     FindPath();
@@ -188,6 +228,7 @@ public class Pedestrian : MonoBehaviour
                 }
                 else
                 {
+                    pathFoundCount++;
                     findingPath = true;
                     currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);
                     FindPath();
@@ -210,15 +251,17 @@ public class Pedestrian : MonoBehaviour
 
     protected void InitializePathfinding()
     {
-        if(currentStartNodePoint==null)
-        currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);
+        if (currentStartNodePoint == null)
+            currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);
 
         // Only set position when we actually found a valid node
         if (currentStartNodePoint != null)
         {
-            cachedTransform.position = currentStartNodePoint.Position;
+          //  cachedTransform.position = currentStartNodePoint.Position;
+            SetPositionAndTeleport(currentStartNodePoint.Position); // MODIFIED
+
         }
-        Debug.Log("Now really started pedestrian");
+        Debug.Log("Now really started pedestrian: " + gameObject.name);
         if (isEndPointOnSpawnSet)
         {
             currentEndTargetDestination = GetPositionNodePoint(endPoint);
@@ -229,13 +272,17 @@ public class Pedestrian : MonoBehaviour
             currentEndTargetDestination = PedestrianDestinations.Instance.GetRandomNodePoint(entityType);
         }
         if (!groupSpawned)
+        {
+            findingPath = true;
             FindPath();
 
-    }
+        }
+        FindPath();
 
+    }
     private NodePoint GetPositionNodePoint(Vector3 position)
     {
-      
+
         Vector3 tileManagerOffset;
 
         if (TileManager.TryGetOffset(tile, out tileManagerOffset))
@@ -276,7 +323,7 @@ public class Pedestrian : MonoBehaviour
             }
             else
             {
-                returnNodePoint = PedestrianDestinations.Instance.GetRandomNodePoint(entityType,tile);
+                returnNodePoint = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, tile);
 
             }
         }
@@ -293,6 +340,7 @@ public class Pedestrian : MonoBehaviour
         currentEndTargetDestination = PedestrianDestinations.Instance.GetRandomNodePoint(entityType);
         try
         {
+            Debug.Log("Gameobject is finding path:" + gameObject.name);
             path = await PedestrianDestinations.Instance.FindPathAsync(currentStartNodePoint, currentEndTargetDestination, entityType, token);
             pathListIndex = 0;
             currentTargetDestination = path.Count > 0 ? path[0] : cachedTransform.position;
@@ -307,7 +355,7 @@ public class Pedestrian : MonoBehaviour
                 isFirstSpawn = true;
             }
             pathFoundCount++;
-            //on instantiate the path is already copied
+   
             if (!isFirstSpawn)
                 NotifyGroupOfNextPath(path);
         }
@@ -355,6 +403,12 @@ public class Pedestrian : MonoBehaviour
 
     private void SpawnGroupWithOffset(int groupSize)
     {
+        // Add safety check - don't spawn group if leader has no path
+        if (path == null || path.Count == 0)
+        {
+            Debug.LogWarning($"Leader {gameObject.name} has no path, cannot spawn group");
+            return;
+        }
         Vector3[] directions = {
             cachedTransform.forward, -cachedTransform.forward,
             cachedTransform.right, -cachedTransform.right
@@ -364,18 +418,58 @@ public class Pedestrian : MonoBehaviour
             Vector3 offsetDirection = directions[i % directions.Length];
             Vector3 groupOffset = offsetDirection * localRightDirectionOffsetStrength;
             groupOffset.y = 0;
+            // Use pool instead of Instantiate
 
-            GameObject pedestrianClone = Instantiate(gameObject, cachedTransform.position + groupOffset, Quaternion.identity, cachedTransform.parent);
-            pedestrianClone.name += i.ToString();
+            GameObject pedestrianClone = entityType == EntityType.Pedestrian
+                ? NpcPoolManager.Instance.GetPedestrian()
+                : NpcPoolManager.Instance.GetCar();
+            Debug.Log($"Got from pool: {gameObject.name}_group_num_{i}_tiles_{tile.x}_{tile.y}");
+            //manually calling it here because pedestrian script might not be ready for  SetPositionAndTeleport 
+            CharacterController cloneCC = pedestrianClone.GetComponent<CharacterController>();
+            if (cloneCC != null) cloneCC.enabled = false;
+
+            pedestrianClone.transform.position = cachedTransform.position + groupOffset; // This is the line to modify.
+
+            if (cloneCC != null)
+            {
+                Physics.SyncTransforms();
+                cloneCC.enabled = true;
+                Physics.SyncTransforms();
+            }
+            //pedestrianClone.transform.position = cachedTransform.position;
+
+            //  pedestrianClone.transform.position = cachedTransform.position + groupOffset;
+            pedestrianClone.transform.rotation = Quaternion.identity;
+            pedestrianClone.transform.parent = cachedTransform.parent;
+            // GameObject pedestrianClone = Instantiate(gameObject, cachedTransform.position + groupOffset, Quaternion.identity, cachedTransform.parent);
+            //            pedestrianClone.name += i.ToString();
+            pedestrianClone.name = $"{gameObject.name}_group_num_{i}_tiles_{tile.x}_{tile.y}"; // Better naming
+
             Pedestrian pedestrianScript = pedestrianClone.GetComponent<Pedestrian>();
+                    pedestrianScript.groupSpawned = true; 
+
+            /* pedestrianScript.ActivateFromPool(
+           cachedTransform.position + groupOffset,
+           currentStartNodePoint,
+           tile
+       );*/
+            Debug.Log("Setting pathfinding variables for:" + pedestrianClone.name);
+            pedestrianScript.path = new List<Vector3>(path);
+            pedestrianScript.currentTargetDestination = path[0];
+
             pedestrianScript.pathListIndex = 0;
             pedestrianScript.groupSpawned = true;
+            pedestrianScript.SpawnGroup = false;
             pedestrianScript.tile = tile;
             float waitTime = (i + 1) * 1.5f;
             pedestrianScript.groupIndividualWaitTime = Time.time + waitTime;
-            pedestrianScript.findingPath = false;
             pedestrianScript.endPoint = currentEndTargetDestination.Position;
             pedestrianScript.firstPathFindCalled = true;
+
+            //new code
+            //Set group-specific properties directly
+            pedestrianScript.currentStartNodePoint = currentStartNodePoint;
+
 
             groupWithSamePath.Add(pedestrianScript);
         }
@@ -490,6 +584,85 @@ public class Pedestrian : MonoBehaviour
     {
         return moveSpeed;
     }
-    
+    public void ResetForPool()
+    {
+        //todo check if this needs to happen
+        // 1. Cancel any ongoing tasks
+        pathfindingCancellationTokenSource?.Cancel();
+        pathfindingCancellationTokenSource?.Dispose();
+        pathfindingCancellationTokenSource = null;
 
+        // 2. Reset core navigation state
+        firstPathFindCalled = false;
+        findingPath = false;
+        pathListIndex = 0;
+        pathFoundCount = 0;
+
+        tile = new Vector2Int(-1, -1);
+        //path
+        path.Clear();
+        groupNextPath.Clear();
+        currentTargetDestination = Vector3.zero;
+        targetWithOffset = Vector3.zero;
+        currentRightOffset = localRightDirectionOffsetStrength;
+        // 5. Reset spawn/group state
+        groupSpawned = false;
+        SpawnGroup = false;  // TODO WHAT TO DO
+        isEndPointOnSpawnSet = false;
+        endPoint = Vector3.zero;
+
+        // 6. Reset navigation nodes
+        currentStartNodePoint = null;
+        currentEndTargetDestination = null;
+        // 7. Reset ragdoll if exists
+        if (GetComponent<Ragdoll>() != null)
+        {
+            Ragdoll ragdoll = GetComponent<Ragdoll>();
+            ragdoll.ResetRagdoll();
+
+        }
+        //tileManagerOffset?
+        //group
+        groupWithSamePath.Clear();
+        getPositionNodePointTransformNeighbourPoints.Clear();
+
+    }
+    // Call this when taking pedestrian from pool
+    public void ActivateFromPool(Vector3 spawnPosition, NodePoint startNode, Vector2Int spawnTile)
+    {
+        ResetForPool();
+
+        // Set initial state
+        SetPositionAndTeleport(spawnPosition);
+
+        cachedTransform.position = spawnPosition;
+        cachedTransform.rotation = Quaternion.identity;
+        tile = spawnTile;
+        currentStartNodePoint = startNode;
+
+        // Set random values (moved from Start)
+        randomGroupNumber = UnityEngine.Random.Range(1, maxGroupNumber);
+        float randomSpeedOffset = UnityEngine.Random.Range(randomSpeedMinimumOffset, randomSpeedMaximumOffset);
+        moveSpeed = 7f + randomSpeedOffset; // Base + random
+
+        gameObject.SetActive(true);
+    }
+    private void SetPositionAndTeleport(Vector3 newPosition)
+    {
+        if (characterController != null)
+        {
+            characterController.enabled = false;
+        }
+
+        cachedTransform.position = newPosition;
+
+        if (characterController != null)
+        {
+            // Physics.SyncTransforms is often required after direct transform manipulation,
+            // especially before re-enabling CharacterController to ensure physics is up-to-date.
+            Physics.SyncTransforms();
+            characterController.enabled = true;
+            Physics.SyncTransforms();
+        }
+    }
 }

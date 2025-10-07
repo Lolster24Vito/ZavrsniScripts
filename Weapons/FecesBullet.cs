@@ -8,8 +8,10 @@ public class FecesBullet : MonoBehaviour
     public float lifeSeconds = 20f;
     public float postImpactDelay = 2f;         // visible time after hitting something
 
+    [Tooltip("The impulse force applied to an NPC when hit by this bullet.")]
+    [SerializeField] private float ragdollImpactForce = 50f; // Force is now tunable
     Rigidbody rb;
-    [SerializeField] private bool enableGravityOnLaunch = false; // set true if you want arcs
+    [SerializeField] private bool enableGravityOnLaunch = true; // set true if you want arcs
     private Vector3 direction = Vector3.zero;
 
     private float bulletSpeed=10f;
@@ -130,9 +132,10 @@ public class FecesBullet : MonoBehaviour
                 Ragdoll collisionRagdoll = collision.gameObject.GetComponentInParent<Ragdoll>();
                 if (collisionRagdoll != null)
                 {
-                    Transform parentDecals = collisionRagdoll.TriggerRagdoll(50f, collision.GetContact(0).point, direction);
+                    Transform parentDecals = collisionRagdoll.TriggerRagdoll(ragdollImpactForce, collision.GetContact(0).point, direction);
                     SpawnDecalByCollision(collision, parentDecals) ;
                 }
+                SpawnDecalByCollision(collision,collision.gameObject.transform);
 
             }
             else

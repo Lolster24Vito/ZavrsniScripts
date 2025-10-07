@@ -120,12 +120,18 @@ public class TileManager : MonoBehaviour
                 //offsetWithoutFirst = WorldRecenterManager.Instance.GetCustomWorldOffsetWithoutFirst();
 
                 Vector3 loopTileCenter = startPos - worldOffset-new Vector3(tile.x * tileWidth, player.position.y, tile.y * tileHeight);
-                float distance = Vector3.Distance(player.position, loopTileCenter);
+                //new code this 124 line is skipped
+                //   float distance = Vector3.Distance(player.position, loopTileCenter);
                 // Use the tile's x/z as a Vector2.
                 Vector2 tileCenter2D = new Vector2(loopTileCenter.x, loopTileCenter.z);
                 // Instead of center-to-center distance, compute the distance from the player to the tile's boundaries.
                 float edgeDistance = DistanceToTile(playerPos2D, tileCenter2D, tileWidth, tileHeight);
-                tilesDistance.Enqueue(tile, distance);
+                // !!! CHANGE IS HERE !!! Use edgeDistance for sorting
+                // If the player is inside the tile, edgeDistance will be 0, prioritizing it correctly.
+                tilesDistance.Enqueue(tile, edgeDistance);
+
+                //old code with old unneded distance that only factored in center
+             //   tilesDistance.Enqueue(tile, distance);
             //    Debug.Log("tiledistances for:" + tile.ToString() + " ,positionOfTile:"+loopTileCenter.ToString() +"distance:" + distance);
                 //ManageTileLoading(tile);
               /*  if (!spawnedDebugCubeOnce)
