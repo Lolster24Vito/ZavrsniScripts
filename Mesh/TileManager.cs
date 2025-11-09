@@ -87,7 +87,8 @@ public class TileManager : MonoBehaviour
     }
     private void ApplyWorldRecenterOffset(Vector3 offset)
     {
-        worldOffset = offset;
+        this.worldOffset += offset;
+        //bug worldOffset = offset;
     }
     [SerializeField] private GameObject spawnDebugCube;
     bool spawnedDebugCubeOnce = false;
@@ -109,85 +110,105 @@ public class TileManager : MonoBehaviour
 
             // Create a copy of the keys to avoid modifying the dictionary while iterating
             List<Vector2Int> tilesToCheck = new List<Vector2Int>(loadedTiles.Keys);
-            PriorityQueue<Vector2Int, float> tilesDistance=new PriorityQueue<Vector2Int, float>();
             Vector2 playerPos2D = new Vector2(player.position.x, player.position.z);
             worldOffset = WorldRecenterManager.Instance.GetRecenterOffset();
 
+            //NEW CODE START
+            Vector2Int playerTileCoords = GetTileOfPosition(player.position);
+            Debug.Log("VITO DEBUG PLAYER TILE COORDINATES:" + playerTileCoords.ToString());
+
+            // Define priority groups
+            List<Vector2Int> priorityTiles = new List<Vector2Int>();
+
+            // First priority: player's tile
+            priorityTiles.Add(playerTileCoords);
+
+            // Second priority: adjacent tiles in cardinal directions
+            priorityTiles.Add(new Vector2Int(playerTileCoords.x - 1, playerTileCoords.y)); // Left
+            priorityTiles.Add(new Vector2Int(playerTileCoords.x + 1, playerTileCoords.y)); // Right
+            priorityTiles.Add(new Vector2Int(playerTileCoords.x, playerTileCoords.y - 1)); // Down
+            priorityTiles.Add(new Vector2Int(playerTileCoords.x, playerTileCoords.y + 1)); // Up
+            PriorityQueue<Vector2Int, float> tilesDistance = new PriorityQueue<Vector2Int, float>();
+
             foreach (var tile in tilesToCheck)
             {
-                //old code
-
-                //offsetWithoutFirst = WorldRecenterManager.Instance.GetCustomWorldOffsetWithoutFirst();
+                if (priorityTiles.Contains(tile)) continue;
 
                 Vector3 loopTileCenter = startPos - worldOffset-new Vector3(tile.x * tileWidth, player.position.y, tile.y * tileHeight);
-                //new code this 124 line is skipped
-                //   float distance = Vector3.Distance(player.position, loopTileCenter);
-                // Use the tile's x/z as a Vector2.
                 Vector2 tileCenter2D = new Vector2(loopTileCenter.x, loopTileCenter.z);
-                // Instead of center-to-center distance, compute the distance from the player to the tile's boundaries.
                 float edgeDistance = DistanceToTile(playerPos2D, tileCenter2D, tileWidth, tileHeight);
-                // !!! CHANGE IS HERE !!! Use edgeDistance for sorting
-                // If the player is inside the tile, edgeDistance will be 0, prioritizing it correctly.
                 tilesDistance.Enqueue(tile, edgeDistance);
-
-                //old code with old unneded distance that only factored in center
-             //   tilesDistance.Enqueue(tile, distance);
-            //    Debug.Log("tiledistances for:" + tile.ToString() + " ,positionOfTile:"+loopTileCenter.ToString() +"distance:" + distance);
-                //ManageTileLoading(tile);
-              /*  if (!spawnedDebugCubeOnce)
-                {
-                    GameObject debugCube = Instantiate(spawnDebugCube, loopTileCenter, Quaternion.identity);
-                    debugCube.name = "Cube tile(" + tile.y + "," + tile.x + ")";
-                }*/
             }
             spawnedDebugCubeOnce=true;
-            //PrintEntityWorldRecenterOffsetsDictionary();
-            //printDistancesQueue(tilesDistance);
 
-            for (int i = 0; i < maxOpenScenes && tilesDistance.Count > 0 ; i++)
+            Debug.Log("VITO 0 STOp");
+
+           // PrintEntityWorldRecenterOffsetsDictionary();
+            printDistancesQueue(tilesDistance);
+            // First, ensure priority tiles are loaded
+            foreach (var tile in priorityTiles)
+            {
+                if (loadedTiles.ContainsKey(tile) && !loadedTiles[tile])
+                {
+                    loadedTiles[tile] = true;
+                    StartCoroutine(LoadTile(tile));
+                }
+            }
+            int loadedCount = 0;
+            foreach (var tile in loadedTiles)
+            {
+                if (tile.Value)
+                {
+                    loadedCount++;
+                }
+            }
+
+            while (tilesDistance.Count > 0 && loadedCount < maxOpenScenes)
             {
                 Vector2Int tileToLoad = tilesDistance.Dequeue();
 
                 //load if not loaded
                 if ( !loadedTiles[tileToLoad])
                 {
-                    // yield return LoadTile(tile);
                     loadedTiles[tileToLoad] = true;
                     StartCoroutine(LoadTile(tileToLoad));
-
+                    loadedCount++;
                 }
             }
-            //else for unload if not present
-            while (tilesDistance.Count > 0)
+           
+            //new code: 30_10
+
+            // Then, check all loaded tiles to see if any should be unloaded
+            List<Vector2Int> tilesToUnload = new List<Vector2Int>();
+            foreach (var tile in loadedTiles)
             {
-                Vector2Int tileToLoad = tilesDistance.Dequeue();
-                if (loadedTiles[tileToLoad])
+                // Skip if it's a priority tile
+                if (priorityTiles.Contains(tile.Key)) continue;
+
+                // Skip if it's already being unloaded
+                if (!tile.Value) continue;
+
+                // Calculate distance to this tile
+                Vector3 tileCenter = startPos - worldOffset - new Vector3(tile.Key.x * tileWidth, player.position.y, tile.Key.y * tileHeight);
+                float distance = Vector3.Distance(player.position, tileCenter);
+
+                // If beyond unload radius, mark for unloading
+                if (distance > unloadRadius)
                 {
-                    //yield return UnloadTile(tile);
-                    loadedTiles[tileToLoad] = false;
-                    StartCoroutine(UnloadTile(tileToLoad));
+                    tilesToUnload.Add(tile.Key);
                 }
             }
-           // PrintEntityWorldRecenterOffsetsDictionary();
 
-            /*
-               worldOffset = WorldRecenterManager.Instance.GetRecenterOffset();
-        tileCenter = startPos - worldOffset - new Vector3(tile.x * tileWidth, player.position.y, tile.y * tileHeight);
-        float distance = Vector3.Distance(player.position, tileCenter);
+            // Unload marked tiles
+            foreach (var tile in tilesToUnload)
+            {
+                loadedTiles[tile] = false;
+                StartCoroutine(UnloadTile(tile));
+                loadedCount--;
+            }
+            Debug.Log("VITO 1 STOp");
+           //  PrintEntityWorldRecenterOffsetsDictionary();
 
-        if (distance < loadRadius && !loadedTiles[tile])
-        {
-            // yield return LoadTile(tile);
-            loadedTiles[tile] = true;
-            StartCoroutine(LoadTile(tile));
-        }
-        else if (distance > unloadRadius && loadedTiles[tile])
-        {
-            //yield return UnloadTile(tile);
-            loadedTiles[tile] = false;
-            StartCoroutine(UnloadTile(tile));
-        } */
-            //PrintEntityWorldRecenterOffsetsDictionary();
             yield return new WaitForSeconds(1f); // Delay between checks to reduce CPU usage
         }
     }
@@ -237,11 +258,14 @@ public class TileManager : MonoBehaviour
 
     private void UpdatePlayerTile()
     {
-        string detectedTileScene = DetectPlayerTile();
+        Vector2Int playerTileCoords = GetTileOfPosition(player.position);
+        string detectedTileScene = "tile_" + playerTileCoords.y + "_" + playerTileCoords.x;
+        //string detectedTileScene = DetectPlayerTile();
         if (!string.IsNullOrEmpty(detectedTileScene) && detectedTileScene != currentTileScene)
         {
             currentTileScene = detectedTileScene;
-            PlayerOnTile = GetTileCoordinatesFromSceneName(currentTileScene);
+            PlayerOnTile = playerTileCoords;
+            // PlayerOnTile = GetTileCoordinatesFromSceneName(currentTileScene);
             if (PlayerOnTile != previousPlayerTile)
             {
                 previousPlayerTile = PlayerOnTile;
@@ -297,19 +321,22 @@ public class TileManager : MonoBehaviour
     }
     public Vector2Int GetTileOfPosition(Vector3 playerPosition)
     {
+        // Get the total world offset from the WorldRecenterManager
+        Vector3 totalWorldOffset = WorldRecenterManager.Instance.GetRecenterOffset();
         // Account for the world offset
-        Vector3 adjustedPlayerPosition = playerPosition + worldOffset;
+        //BUG CODE 
+      //  Vector3 originalWorldPosition = playerPosition + worldOffset;
+        //FIXED CODE:
+         Vector3 originalWorldPosition = playerPosition + totalWorldOffset;
+
         // Calculate relative position from the starting position
-        float relativeX = adjustedPlayerPosition.x - startPos.x;
-        float relativeZ = adjustedPlayerPosition.z - startPos.z;
+        float relativeX = (startPos.x - originalWorldPosition.x);
+        float relativeZ = (startPos.z - originalWorldPosition.z);
 
         // Calculate the tile indices (ensure proper flooring)
-        int tileX = Mathf.FloorToInt(relativeX / tileWidth);
-        int tileY = Mathf.FloorToInt(relativeZ / tileHeight);
+        int tileX = Mathf.RoundToInt(relativeX / tileWidth);
+        int tileY = Mathf.RoundToInt(relativeZ / tileHeight);
 
-        // Debugging logs to verify correctness
-        Debug.Log($"[TileManager] Player Position: {playerPosition}, Adjusted Position: {adjustedPlayerPosition}, World Offset: {worldOffset}");
-        Debug.Log($"[TileManager] Relative Position: ({relativeX}, {relativeZ}), Tile Indices: ({tileX}, {tileY})");
 
         return new Vector2Int(tileX, tileY);
     }
