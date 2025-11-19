@@ -11,8 +11,8 @@ public class PedestrianSpawner : MonoBehaviour
 
 
 
-    private static int pedestrianNumberToSpawn = 10;
-    private static int carNumberToSpawn = 10;
+    private static int pedestrianNumberToSpawn = 20;
+    private static int carNumberToSpawn = 20;
 
 
     private Transform tileContainer;
@@ -21,6 +21,8 @@ public class PedestrianSpawner : MonoBehaviour
     private float checkInterval = 1.3f; // Check every 1.3 seconds
     private float timeSinceLastCheck = 0f;
     Vector3 worldOffset = Vector3.zero;
+    [SerializeField] private bool useDOTSMovement = true;
+
     private void OnEnable()
     {
         TileManager.OnPlayerTileChanged += HandlePlayerTileChanged;
@@ -59,6 +61,7 @@ public class PedestrianSpawner : MonoBehaviour
     // Start is called before the first frame update
     public void Spawn()
     {
+        Debug.Log("Spawn VITO");
         StartCoroutine(SpawnWithWait());
     }
     private IEnumerator SpawnWithWait()
@@ -81,6 +84,7 @@ public class PedestrianSpawner : MonoBehaviour
             HandlePlayerTileChanged(TileManager.PlayerOnTile);
         }
     }
+
     private void SpawnEntities()
     {
         NodePoint lastNode = null;
@@ -117,6 +121,7 @@ public class PedestrianSpawner : MonoBehaviour
 
             //GameObject spawnedObject = NpcPoolManager.Instance.GetPedestrian();
             Pedestrian pedestrianScript = spawnedObject.GetComponent<Pedestrian>();
+            pedestrianScript.useDOTSMovement = useDOTSMovement; // Toggle DOTS vs Mono movement
             pedestrianScript.ActivateFromPool(
                 randomPosition.Position - worldOffset,
                 randomPosition,
@@ -163,7 +168,7 @@ public class PedestrianSpawner : MonoBehaviour
         if (!isActive)
         {
             ReturnAllNpcsToPool();
-            //Destroy(tileContainer.gameObject);
+            Destroy(tileContainer.gameObject,4);
         }
         if (isActive && tileContainer.childCount == 0)
         {

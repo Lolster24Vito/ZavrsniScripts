@@ -29,9 +29,11 @@ public class TileManager : MonoBehaviour
     private Vector2Int previousPlayerTile;
 
     private Dictionary<Vector2Int, bool> loadedTiles = new Dictionary<Vector2Int, bool>();
+    private Dictionary<Vector2Int, int> tilePriorities = new Dictionary<Vector2Int, int>();
+
     private Vector3 tileCenter;
     private string currentTileScene; // Current tile the player is on
-  [SerializeField]  private int maxOpenScenes=4;
+    [SerializeField] private int maxOpenScenes = 4;
 
     // track the offset from the time  it is spawned  and use that for the pedestrian calculation of the path  because of world relocation due to floating origin point.
 
@@ -59,7 +61,10 @@ public class TileManager : MonoBehaviour
         {
             for (int y = 0; y <= gridSize.y; y++)
             {
-                loadedTiles[new Vector2Int(x, y)] = false;
+                Vector2Int tile = new Vector2Int(x, y);
+                loadedTiles[tile] = false;
+                tilePriorities[tile] = 0;
+
             }
         }
 
@@ -113,39 +118,47 @@ public class TileManager : MonoBehaviour
             Vector2 playerPos2D = new Vector2(player.position.x, player.position.z);
             worldOffset = WorldRecenterManager.Instance.GetRecenterOffset();
 
-            //NEW CODE START
             Vector2Int playerTileCoords = GetTileOfPosition(player.position);
-            Debug.Log("VITO DEBUG PLAYER TILE COORDINATES:" + playerTileCoords.ToString());
 
             // Define priority groups
             List<Vector2Int> priorityTiles = new List<Vector2Int>();
+            // Reset all priorities
+            foreach (var tile in tilesToCheck)
+            {
+                tilePriorities[tile] = 0;
+            }
 
             // First priority: player's tile
             priorityTiles.Add(playerTileCoords);
-
             // Second priority: adjacent tiles in cardinal directions
             priorityTiles.Add(new Vector2Int(playerTileCoords.x - 1, playerTileCoords.y)); // Left
             priorityTiles.Add(new Vector2Int(playerTileCoords.x + 1, playerTileCoords.y)); // Right
             priorityTiles.Add(new Vector2Int(playerTileCoords.x, playerTileCoords.y - 1)); // Down
             priorityTiles.Add(new Vector2Int(playerTileCoords.x, playerTileCoords.y + 1)); // Up
-            PriorityQueue<Vector2Int, float> tilesDistance = new PriorityQueue<Vector2Int, float>();
 
-            foreach (var tile in tilesToCheck)
+            foreach (var tile in priorityTiles)
             {
-                if (priorityTiles.Contains(tile)) continue;
-
-                Vector3 loopTileCenter = startPos - worldOffset-new Vector3(tile.x * tileWidth, player.position.y, tile.y * tileHeight);
-                Vector2 tileCenter2D = new Vector2(loopTileCenter.x, loopTileCenter.z);
-                float edgeDistance = DistanceToTile(playerPos2D, tileCenter2D, tileWidth, tileHeight);
-                tilesDistance.Enqueue(tile, edgeDistance);
+                if (tilePriorities.ContainsKey(tile))
+                {
+                    tilePriorities[tile] = 4;
+                }
             }
-            spawnedDebugCubeOnce=true;
 
-            Debug.Log("VITO 0 STOp");
-
-           // PrintEntityWorldRecenterOffsetsDictionary();
-            printDistancesQueue(tilesDistance);
-            // First, ensure priority tiles are loaded
+            Vector2Int[] diagonalTiles = {
+                new Vector2Int(playerTileCoords.x - 1, playerTileCoords.y - 1),
+                new Vector2Int(playerTileCoords.x + 1, playerTileCoords.y - 1),
+                new Vector2Int(playerTileCoords.x - 1, playerTileCoords.y + 1),
+                new Vector2Int(playerTileCoords.x + 1, playerTileCoords.y + 1)
+            };
+            foreach (var tile in diagonalTiles)
+            {
+                if (tilePriorities.ContainsKey(tile))
+                {
+                    tilePriorities[tile] = 3;
+                }
+            }
+            //  ensure priority tiles are loaded
+            /*
             foreach (var tile in priorityTiles)
             {
                 if (loadedTiles.ContainsKey(tile) && !loadedTiles[tile])
@@ -153,7 +166,41 @@ public class TileManager : MonoBehaviour
                     loadedTiles[tile] = true;
                     StartCoroutine(LoadTile(tile));
                 }
+            }*/
+            PriorityQueue<Vector2Int, TilePriority> tilesQueue = new PriorityQueue<Vector2Int, TilePriority>();
+
+            /*
+                        PriorityQueue<Vector2Int, float> tilesDistance = new PriorityQueue<Vector2Int, float>();
+
+                        foreach (var tile in tilesToCheck)
+                        {
+                            if (priorityTiles.Contains(tile)) continue;
+
+                            Vector3 loopTileCenter = startPos - worldOffset - new Vector3(tile.x * tileWidth, player.position.y, tile.y * tileHeight);
+                            Vector2 tileCenter2D = new Vector2(loopTileCenter.x, loopTileCenter.z);
+                            float edgeDistance = DistanceToTile(playerPos2D, tileCenter2D, tileWidth, tileHeight);
+                            tilesDistance.Enqueue(tile, edgeDistance);
+                        }
+                        spawnedDebugCubeOnce = true;
+            */
+            /// Debug.Log("VITO 0 STOp");
+
+            // PrintEntityWorldRecenterOffsetsDictionary();
+            //  printDistancesQueue(tilesDistance);
+            foreach (var tile in tilesToCheck)
+            {
+                // Skip if already loaded
+                if (loadedTiles[tile]) continue;
+
+                Vector3 loopTileCenter = startPos - worldOffset - new Vector3(tile.x * tileWidth, player.position.y, tile.y * tileHeight);
+                Vector2 tileCenter2D = new Vector2(loopTileCenter.x, loopTileCenter.z);
+                float edgeDistance = DistanceToTile(playerPos2D, tileCenter2D, tileWidth, tileHeight);
+
+                // Create a composite priority: higher priority for important tiles, and within same priority, closer tiles first
+                TilePriority priority = new TilePriority(tilePriorities[tile], edgeDistance);
+                tilesQueue.Enqueue(tile, priority);
             }
+
             int loadedCount = 0;
             foreach (var tile in loadedTiles)
             {
@@ -163,19 +210,25 @@ public class TileManager : MonoBehaviour
                 }
             }
 
-            while (tilesDistance.Count > 0 && loadedCount < maxOpenScenes)
+            while (tilesQueue.Count > 0 && loadedCount < maxOpenScenes)
             {
-                Vector2Int tileToLoad = tilesDistance.Dequeue();
-
+                Vector2Int tileToLoad = tilesQueue.Dequeue();
+                /*
+                 *   // In critical mode, only load the player's tile
+                if (criticalPerformance && tilePriorities[tileToLoad] < 5)
+                {
+                    continue;
+                }
+                 * */
                 //load if not loaded
-                if ( !loadedTiles[tileToLoad])
+                if (!loadedTiles[tileToLoad])
                 {
                     loadedTiles[tileToLoad] = true;
                     StartCoroutine(LoadTile(tileToLoad));
                     loadedCount++;
                 }
             }
-           
+
             //new code: 30_10
 
             // Then, check all loaded tiles to see if any should be unloaded
@@ -183,7 +236,7 @@ public class TileManager : MonoBehaviour
             foreach (var tile in loadedTiles)
             {
                 // Skip if it's a priority tile
-                if (priorityTiles.Contains(tile.Key)) continue;
+           //     if (priorityTiles.Contains(tile.Key)) continue;
 
                 // Skip if it's already being unloaded
                 if (!tile.Value) continue;
@@ -196,18 +249,45 @@ public class TileManager : MonoBehaviour
                 if (distance > unloadRadius)
                 {
                     tilesToUnload.Add(tile.Key);
+                } // If we have too many tiles loaded, add lower priority tiles to unload list
+                else if (loadedCount > maxOpenScenes)
+                {
+                    tilesToUnload.Add(tile.Key);
                 }
             }
+            // Sort tiles to unload by priority (lower priority first) and then by distance (farther first)
+            tilesToUnload.Sort((a, b) => {
+                int priorityCompare = tilePriorities[a].CompareTo(tilePriorities[b]);
+                if (priorityCompare != 0) return priorityCompare;
 
-            // Unload marked tiles
-            foreach (var tile in tilesToUnload)
+                // If same priority, compare distance
+                Vector3 centerA = startPos - worldOffset - new Vector3(a.x * tileWidth, player.position.y, a.y * tileHeight);
+                Vector3 centerB = startPos - worldOffset - new Vector3(b.x * tileWidth, player.position.y, b.y * tileHeight);
+
+                float distA = Vector3.Distance(player.position, centerA);
+                float distB = Vector3.Distance(player.position, centerB);
+
+                return distB.CompareTo(distA); // Farther first
+            });
+            int tilesToUnloadCount = Mathf.Min(tilesToUnload.Count, loadedCount - maxOpenScenes);
+            for (int i = 0; i < tilesToUnloadCount; i++)
             {
+                Vector2Int tile = tilesToUnload[i];
                 loadedTiles[tile] = false;
                 StartCoroutine(UnloadTile(tile));
                 loadedCount--;
             }
-            Debug.Log("VITO 1 STOp");
-           //  PrintEntityWorldRecenterOffsetsDictionary();
+            /*
+
+                        // Unload marked tiles
+                        foreach (var tile in tilesToUnload)
+                        {
+                            loadedTiles[tile] = false;
+                            StartCoroutine(UnloadTile(tile));
+                            loadedCount--;
+                        }*/
+            // Debug.Log("VITO 1 STOp");
+            //  PrintEntityWorldRecenterOffsetsDictionary();
 
             yield return new WaitForSeconds(1f); // Delay between checks to reduce CPU usage
         }
@@ -215,7 +295,38 @@ public class TileManager : MonoBehaviour
 
     private void printDistancesQueue(PriorityQueue<Vector2Int, float> tilesDistance)
     {
-        Debug.Log("tilesQueue" + tilesDistance.ToString());
+        // Check if the queue is empty first
+        if (tilesDistance.Count == 0)
+        {
+            Debug.Log("tilesQueue: [] (Empty)");
+            return;
+        }
+
+        // Access the elements via the exposed UnorderedItems property.
+        // This allows iteration without modifying the heap (no Dequeue/Enqueue loop needed).
+
+        System.Text.StringBuilder sb = new System.Text.StringBuilder("tilesQueue (Tile: Distance): [");
+        bool isFirst = true;
+
+        // Iterate over the elements and their priorities (distances)
+        foreach (var item in tilesDistance.UnorderedItems)
+        {
+            if (!isFirst)
+            {
+                sb.Append(", ");
+            }
+
+            Vector2Int tile = item.Element;
+            float distance = item.Priority;
+
+            // Format the output: (x, y): distance
+            sb.Append($"({tile.x}, {tile.y}): {distance:F2}");
+
+            isFirst = false;
+        }
+
+        sb.Append("]");
+        Debug.Log(sb.ToString());
     }
 
     public void PrintEntityWorldRecenterOffsetsDictionary()
@@ -325,9 +436,9 @@ public class TileManager : MonoBehaviour
         Vector3 totalWorldOffset = WorldRecenterManager.Instance.GetRecenterOffset();
         // Account for the world offset
         //BUG CODE 
-      //  Vector3 originalWorldPosition = playerPosition + worldOffset;
+        //  Vector3 originalWorldPosition = playerPosition + worldOffset;
         //FIXED CODE:
-         Vector3 originalWorldPosition = playerPosition + totalWorldOffset;
+        Vector3 originalWorldPosition = playerPosition + totalWorldOffset;
 
         // Calculate relative position from the starting position
         float relativeX = (startPos.x - originalWorldPosition.x);
@@ -398,6 +509,29 @@ public class TileManager : MonoBehaviour
         {
             Debug.LogError($"Failed to parse scene name '{sceneName}'. Error: {ex.Message}");
             return Vector2Int.zero;
+        }
+    }
+
+    // Helper class for priority queue to handle both priority level and distance
+    private struct TilePriority : IComparable<TilePriority>
+    {
+        public int PriorityLevel;
+        public float Distance;
+
+        public TilePriority(int priorityLevel, float distance)
+        {
+            PriorityLevel = priorityLevel;
+            Distance = distance;
+        }
+
+        public int CompareTo(TilePriority other)
+        {
+            // Higher priority level should come first (negative for descending sort)
+            int priorityComparison = other.PriorityLevel.CompareTo(PriorityLevel);
+            if (priorityComparison != 0) return priorityComparison;
+
+            // If same priority, closer distance should come first
+            return Distance.CompareTo(other.Distance);
         }
     }
 }

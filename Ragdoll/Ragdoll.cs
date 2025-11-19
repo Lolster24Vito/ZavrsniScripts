@@ -88,7 +88,10 @@ public class Ragdoll : MonoBehaviour
         }
         capsuleCollider.enabled = true;
         animator.enabled = true;
+        if(characterController!=null)
+        {
         characterController.enabled = true;
+        }
         ragdollState = RagdollState.Walking;
     }
     private void EnableRagdoll()
@@ -104,7 +107,12 @@ public class Ragdoll : MonoBehaviour
         capsuleCollider.enabled = false;
 
         animator.enabled = false;
+                if(characterController!=null)
+                {
+                
         characterController.enabled = false;
+                        }
+
         ragdollState = RagdollState.Ragdoll;
         pedestrian.enabled = false;
         timeToWakeUp = ragdollDuration;

@@ -25,6 +25,9 @@ public class AStar
     // Tile-specific buckets: tileBuckets[tile][entityType]  List<NodePoint>
     private readonly Dictionary<Vector2Int, Dictionary<EntityType, List<NodePoint>>> tileBuckets
       = new Dictionary<Vector2Int, Dictionary<EntityType, List<NodePoint>>>();
+
+    public static readonly float NEIGHBOUR_SEARCH_RADIUS = 50f;
+
     public AStar()
     {
         Points = new Dictionary<Vector3, NodePoint>();
@@ -38,9 +41,9 @@ public class AStar
             {
                 if (Points.ContainsKey(position)) continue;
 
-                
-                    NodePoint nodePoint = new NodePoint(position, type, tile);
-                    Points[position] = nodePoint;
+
+                NodePoint nodePoint = new NodePoint(position, type, tile);
+                Points[position] = nodePoint;
                 if (type == NodeType.Sidewalk)
                     bucket[EntityType.Pedestrian].Add(nodePoint);
                 else if (type == NodeType.Road)
@@ -62,17 +65,35 @@ public class AStar
             }
         }
     }
+    public List<NodePoint> GetNodesForTile(Vector2Int tile)
+    {
+        lock (pointsLock)
+        {
+            if (!tileBuckets.TryGetValue(tile, out var tileBucket))
+            {
+                // If the tile doesn't exist in our dictionary, return an empty list
+                return new List<NodePoint>();
+            }
+
+            List<NodePoint> allNodesOnTile = new List<NodePoint>();
+            foreach (var nodeList in tileBucket.Values)
+            {
+                allNodesOnTile.AddRange(nodeList);
+            }
+            return allNodesOnTile;
+        }
+    }
     public NodePoint GetRandomPoint(EntityType entityType)
     {
         List<NodePoint> list = bucket[entityType];
         if (list.Count == 0) return null;
         int index = UnityEngine.Random.Range(0, list.Count);
         return list[index];
-       
+
     }
     public NodePoint GetRandomPoint(EntityType entityType, Vector2Int tile)
     {
-      
+
         if (tileBuckets.TryGetValue(tile, out var tb))
         {
             var list = tb[entityType];
@@ -96,21 +117,22 @@ public class AStar
     }
     public void AddNeighbour(Vector3 currentPointPosition, Vector3 neighbourPosition)
     {
-        lock(pointsLock){
+        lock (pointsLock)
+        {
 
-        
-        if (!Points.ContainsKey(currentPointPosition) || !Points.ContainsKey(neighbourPosition))
-            return;
 
-        NodePoint currentNode = Points[currentPointPosition];
-        NodePoint tobeNeighbourNode = Points[neighbourPosition];
-        if (currentNode == tobeNeighbourNode)
-            return;
+            if (!Points.ContainsKey(currentPointPosition) || !Points.ContainsKey(neighbourPosition))
+                return;
 
-        float distance = Vector3.Distance(currentPointPosition, neighbourPosition);
+            NodePoint currentNode = Points[currentPointPosition];
+            NodePoint tobeNeighbourNode = Points[neighbourPosition];
+            if (currentNode == tobeNeighbourNode)
+                return;
 
-        Points[currentPointPosition].Neighbours[tobeNeighbourNode] = distance;
-        Points[neighbourPosition].Neighbours[currentNode] = distance;
+            float distance = Vector3.Distance(currentPointPosition, neighbourPosition);
+
+            Points[currentPointPosition].Neighbours[tobeNeighbourNode] = distance;
+            Points[neighbourPosition].Neighbours[currentNode] = distance;
         }
     }
     private void AddNeighboursFromKDTree(Vector3 point, KDTree tree, float radius)
@@ -149,10 +171,10 @@ public class AStar
                     else if (np.Type == NodeType.Road)
                         bucket[EntityType.Car].Remove(np);
                 }
-              
+
             }
         }
-        }
+    }
     public void ClearPoints()
     {
         lock (pointsLock)
@@ -235,7 +257,7 @@ public class AStar
                             previous[neighbour] = current;
                             gScore[neighbour] = calculatedGScore;
                             float heuristicValue = Vector3.Distance(neighbour.Position, end.Position);
-                           float fScore = (calculatedGScore + heuristicValue)*GetWeightForPoint(current,entityType);
+                            float fScore = (calculatedGScore + heuristicValue) * GetWeightForPoint(current, entityType);
                             lastProcessedNode = current;
 
                             //a*
@@ -355,7 +377,30 @@ public class AStar
         return currentNode;
 
     }
+    public void InitializeNeighboursForTile(Vector2Int tile, KDTree tree)
+    {
+        lock (pointsLock)
+        {
+            if (!tileBuckets.TryGetValue(tile, out var tileBucket)) return;
 
+            List<NodePoint> allNodesOnTile = new List<NodePoint>();
+            foreach (var nodeList in tileBucket.Values)
+            {
+                allNodesOnTile.AddRange(nodeList);
+            }
+
+            if (tree == null) return;
+
+            foreach (var node in allNodesOnTile)
+            {
+                List<Vector3> neighbourPositions = tree.RadialSearch(node.Position, NEIGHBOUR_SEARCH_RADIUS);
+                foreach (var neighbourPos in neighbourPositions)
+                {
+                    AddNeighbour(node.Position, neighbourPos);
+                }
+            }
+        }
+    }
 }
 
 

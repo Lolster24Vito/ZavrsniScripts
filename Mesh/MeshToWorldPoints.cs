@@ -32,6 +32,7 @@ public class MeshToWorldPoints : MonoBehaviour
         Mesh mesh = meshFilter.mesh;
         Vector3[] vertices = mesh.vertices;
         worldPoints.Clear();
+        int sampleRate = 2; // Adjust this based on your needs
 
         // Transform vertices to world space
         for (int i = 0; i < vertices.Length; i++)

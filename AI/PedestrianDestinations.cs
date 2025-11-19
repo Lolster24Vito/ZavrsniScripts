@@ -36,6 +36,11 @@ public class PedestrianDestinations : MonoBehaviour
     {
         return isPathFindingReady;
     }
+    public void SetPathFindingReady(bool ready)
+    {
+        isPathFindingReady = ready;
+        Debug.Log($"Pathfinding system readiness set to: {ready}");
+    }
 
 
     private void Awake()
@@ -58,6 +63,7 @@ public class PedestrianDestinations : MonoBehaviour
     public void RemovePointsOnTile(Vector2Int tile)
     {
         aStar.RemovePoints(tile);
+        UpdateGlobalKDTree();
     }
 
     private void OnDisable()
@@ -232,6 +238,22 @@ public class PedestrianDestinations : MonoBehaviour
     public async Task<List<Vector3>> FindPathAsync(NodePoint start, NodePoint end, EntityType entityType, CancellationToken token)
     {
         return await aStar.FindPathAsync(start, end, tree, entityType, token);
+    }
+
+
+    public void UpdateGlobalKDTree()
+    {
+        List<Vector3> allPoints = new List<Vector3>(aStar.Points.Keys);
+        if (allPoints.Count == 0)
+        {
+            tree = null; // No points left, clear the tree
+            Debug.Log("KDTree cleared as there are no more points.");
+        }
+        else
+        {
+            tree = new KDTree(allPoints);
+            Debug.Log($"Global KDTree rebuilt with {allPoints.Count} total points.");
+        }
     }
 
 
