@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.AI;
 using Unity.Entities;
-using AI.DOTS.Components;
 using Unity.Transforms; // Required for LocalTransform
 using Unity.Mathematics;
+using Assets.Scripts.AI.DOTS.Components;
 
 public class Pedestrian : MonoBehaviour
 {

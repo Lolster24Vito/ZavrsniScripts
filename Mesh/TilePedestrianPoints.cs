@@ -37,6 +37,7 @@ public class TilePedestrianPoints : MonoBehaviour
     };
 
     private List<MeshRenderer> lodRenderers = new List<MeshRenderer>();
+    private List<Vector3> cachedNeighborList = new List<Vector3>();
     private void Awake()
     {
         //fill lodRenderers list with road,paths,objects
@@ -122,9 +123,8 @@ public class TilePedestrianPoints : MonoBehaviour
             // Calculate neighbors ONLY for the NEW points
             foreach (Vector3 origin in newPointsToProcess)
             {
-                // This heavy math happens in background without freezing game
-                List<Vector3> neighbors = tempTree.RadialSearch(origin, searchRadius);
-                foreach (Vector3 target in neighbors)
+                tempTree.RadialSearch(origin, searchRadius, cachedNeighborList);
+                foreach (Vector3 target in cachedNeighborList)
                 {
                     // Self-check: don't link to self
                     if (origin != target)
@@ -187,8 +187,8 @@ public class TilePedestrianPoints : MonoBehaviour
             NodePoint node = allNodesOnTile[i];
 
             // Find all points within the search radius using the fast KD-Tree
-            List<Vector3> neighbourPositions = tree.RadialSearch(node.Position, AStar.NEIGHBOUR_SEARCH_RADIUS);
-            foreach (var neighbourPos in neighbourPositions)
+          tree.RadialSearch(node.Position, AStar.NEIGHBOUR_SEARCH_RADIUS, cachedNeighborList);
+            foreach (var neighbourPos in cachedNeighborList)
             {
                 // The AddNeighbour method handles the logic of adding the connection
                 // and prevents duplicates.

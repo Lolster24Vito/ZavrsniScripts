@@ -68,10 +68,31 @@ public class Ragdoll : MonoBehaviour
         timeToWakeUp -= Time.deltaTime;
         if (timeToWakeUp <= 0)
         {
-            AlignPositionToHips();
-            DisableRagdoll();
-            ragdollState = RagdollState.StandingUp;
-            animator.Play(standUpStateName);
+
+            // 1. Gather data
+            // (Even though the script is disabled, we can still read its public variables)
+            EntityType typeToRespawn = pedestrian.entityType;
+            Vector2Int currentTile = pedestrian.GetTile();
+
+            // 2. Find a valid position for the new entity
+            // We don't want to spawn exactly where the body is (it might be off the navmesh).
+            // We ask the navigation system for a fresh random point on the same tile.
+            NodePoint spawnNode = PedestrianDestinations.Instance.GetNearestValidNode(
+                        transform.position,
+                        typeToRespawn,
+                        currentTile
+                    );
+            // 3. Request Spawn
+            if (DotsSpawnerBridge.Instance != null && spawnNode != null)
+            {
+                DotsSpawnerBridge.Instance.RequestSpawn(typeToRespawn, currentTile, spawnNode.Position);
+            }
+
+            // 4. Release Ragdoll
+
+            // --- FIX END ---
+
+            NpcPoolManager.Instance.ReleasePedestrianRagdoll(this.gameObject);
         }
 
     }
@@ -131,8 +152,11 @@ public class Ragdoll : MonoBehaviour
     {
         if (animator.GetCurrentAnimatorStateInfo(0).IsName(standUpStateName) == false)
         {
-            ragdollState = RagdollState.Walking;
-            pedestrian.enabled = true;
+            // todo VITO see if this messes up the game
+            //old working code
+            //ragdollState = RagdollState.Walking;
+            //pedestrian.enabled = true;
+            NpcPoolManager.Instance.ReleasePedestrianRagdoll(this.gameObject);
         }
     }
     //this is used to reset the ragdoll state when pooling.

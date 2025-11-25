@@ -1,7 +1,7 @@
 using Unity.Entities;
 using Unity.Mathematics;
 
-namespace AI.DOTS.Components
+namespace Assets.Scripts.AI.DOTS.Components
 {
     public struct PedestrianTag : IComponentData { }
 
@@ -15,6 +15,7 @@ namespace AI.DOTS.Components
         public bool FirstPathFindCalled;
         public bool GroupSpawned;
         public float GroupWaitTime;
+        public EntityType NpcType; 
     }
 
     public struct PathElement : IBufferElementData

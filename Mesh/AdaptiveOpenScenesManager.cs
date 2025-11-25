@@ -10,10 +10,14 @@ public class AdaptiveOpenScenesManager : MonoBehaviour
     public int targetFPS = 72;
     public int targetFPSRange = 8;
     public int minOpenScenes = 4;
-    public int maxOpenScenesLimit = 20;
+    public int criticalMinScenes = 2; // The absolute floor (Player only)
+    public int maxOpenScenesLimit = 9;
     public bool autoStablizeOpenScenes = false;
     private float deltaTime = 0.0f;
     float currentFPS;
+    // FPS Calculation
+    private float fpsAccumulator = 0f;
+    private int fpsSamples = 0;
 
     private int consecutiveLowFPSFrames = 0;
     private int consecutiveHighFPSFrames = 0;
@@ -25,8 +29,6 @@ public class AdaptiveOpenScenesManager : MonoBehaviour
         // SetRefreshRateTo120();
         if (autoStablizeOpenScenes)
         {
-
-
             StartCoroutine(AdjustTileLoading());
         }
     }
@@ -96,20 +98,29 @@ public class AdaptiveOpenScenesManager : MonoBehaviour
     void Update()
     {
         currentFPS = 1.0f / Time.unscaledDeltaTime;
+        fpsAccumulator += currentFPS;
+        fpsSamples++;
     }
     IEnumerator AdjustTileLoading()
     {
         while (true)
         {
             yield return new WaitForSeconds(checkInterval);
+          
+            float averageFPS = 0;
+            if (fpsSamples > 0) averageFPS = fpsAccumulator / fpsSamples;
+            // Reset accumulator for next interval
+            fpsAccumulator = 0;
+            fpsSamples = 0;
 
+            int currentMaxScenes = tileManager.GetMaxOpenScenes();
             // Track consecutive frames of low/high FPS to avoid overreacting to temporary spikes
-            if (currentFPS < targetFPS)
+            if (averageFPS < targetFPS)
             {
                 consecutiveLowFPSFrames++;
                 consecutiveHighFPSFrames = 0;
             }
-            else if (currentFPS > targetFPS + targetFPSRange)
+            else if (averageFPS > targetFPS + targetFPSRange)
             {
                 consecutiveHighFPSFrames++;
                 consecutiveLowFPSFrames = 0;
@@ -122,7 +133,7 @@ public class AdaptiveOpenScenesManager : MonoBehaviour
             }
 
             // Only adjust after multiple consecutive checks to avoid oscillation
-            if (consecutiveLowFPSFrames >= 2)
+            if (consecutiveLowFPSFrames >= 1) // React faster using average
             {
                 // If FPS is consistently low, reduce max open scenes
                 if (tileManager.GetMaxOpenScenes() > minOpenScenes)

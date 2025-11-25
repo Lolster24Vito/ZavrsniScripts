@@ -26,8 +26,13 @@ public class AStar
     private readonly Dictionary<Vector2Int, Dictionary<EntityType, List<NodePoint>>> tileBuckets
       = new Dictionary<Vector2Int, Dictionary<EntityType, List<NodePoint>>>();
 
+    private Dictionary<NodePoint, float> gScoreCache = new Dictionary<NodePoint, float>();
+    private Dictionary<NodePoint, NodePoint> previousCache = new Dictionary<NodePoint, NodePoint>();
+    private HashSet<NodePoint> closedSetCache = new HashSet<NodePoint>();
+    private PriorityQueue<NodePoint, float> openSetCache = new PriorityQueue<NodePoint, float>();
     public static readonly float NEIGHBOUR_SEARCH_RADIUS = 50f;
 
+    private List<Vector3> cachedNeighborList = new List<Vector3>();
     public AStar()
     {
         Points = new Dictionary<Vector3, NodePoint>();
@@ -137,8 +142,9 @@ public class AStar
     }
     private void AddNeighboursFromKDTree(Vector3 point, KDTree tree, float radius)
     {
-        List<Vector3> neighbours = tree.RadialSearch(point, radius);
-        foreach (var neighbour in neighbours)
+        tree.RadialSearch(point, radius, cachedNeighborList);
+        //List<Vector3> neighbours = tree.RadialSearch(point, radius, null);
+        foreach (var neighbour in cachedNeighborList)
         {
             AddNeighbour(point, neighbour);
         }
@@ -212,21 +218,10 @@ public class AStar
                 HashSet<NodePoint> closedSet = new HashSet<NodePoint>();
                 PriorityQueue<NodePoint, float> openSet = new PriorityQueue<NodePoint, float>();
                 // Initialize distances to infinity and previous nodes to null
-                foreach (var node in pointsSnapshot)
-                {
-                    if (node == null)
-                    {
-                        Debug.Log(" Null NodePoint encountered during pathfinding initialization.");
-                        continue; // Skip processing this node
-                    }
-                    gScore[node] = float.MaxValue;
-                    previous[node] = null;
-                }
 
                 gScore[start] = 0;
-                // Priority queue (min-heap) to store the nodes that are explored
-                //last processed node is used as a fallback path if no path found 
-                NodePoint lastProcessedNode = null;
+
+                NodePoint lastProcessedNode = start;
 
                 openSet.Enqueue(start, 0);
 
@@ -241,27 +236,32 @@ public class AStar
                     {
                         break; // Exit if end node is reached
                     }
+                    if (closedSet.Contains(current)) continue; // Check for re-processing
+
                     closedSet.Add(current);
+                    lastProcessedNode = current;
 
                     foreach (var neighbourPair in current.Neighbours)
                     {
                         NodePoint neighbour = neighbourPair.Key;
-                        if (closedSet.Contains(neighbour))
-                        {
-                            continue; // Skip this neighbour  it was already evaluated
+                        if (closedSet.Contains(neighbour)) continue;
 
-                        }
-                        float calculatedGScore = gScore[current] + neighbourPair.Value;
-                        if (calculatedGScore < gScore[neighbourPair.Key])
+                        float currentG = gScore[current]; // Guaranteed to exist if current came from openSet
+                        float tentativeGScore = currentG + neighbourPair.Value;
+
+                        // FIX: Check neighbor's current G-Score using TryGetValue (Implicit Infinity)
+                        float neighborCurrentG = gScore.TryGetValue(neighbour, out float nVal) ? nVal : float.MaxValue;
+
+                        if (tentativeGScore < neighborCurrentG)
                         {
                             previous[neighbour] = current;
-                            gScore[neighbour] = calculatedGScore;
-                            float heuristicValue = Vector3.Distance(neighbour.Position, end.Position);
-                            float fScore = (calculatedGScore + heuristicValue) * GetWeightForPoint(current, entityType);
-                            lastProcessedNode = current;
+                            gScore[neighbour] = tentativeGScore;
 
-                            //a*
-                            openSet.Enqueue(neighbourPair.Key, fScore);
+                            float heuristicValue = Vector3.Distance(neighbour.Position, end.Position);
+                            // FIX: Apply weight to the NEIGHBOR, not the current node (see Recommendation 2)
+                            float fScore = (tentativeGScore + heuristicValue) * GetWeightForPoint(neighbour, entityType);
+
+                            openSet.Enqueue(neighbour, fScore);
                         }
                     }
 
@@ -282,38 +282,132 @@ public class AStar
             {
                 return new List<Vector3>();
             }
+            return new List<Vector3>(); // Placeholder for return path
         }, token);
+    }
+    public List<Vector3> FindPathSync(NodePoint start, NodePoint end, EntityType entityType)
+    {
+        if (start == null || end == null) return new List<Vector3>();
+        gScoreCache.Clear();
+        previousCache.Clear();
+        closedSetCache.Clear();
+        openSetCache.Clear();
+        //todo VITO vidi jeli ovo treba jedanput napraviti ili jeli zeznulo
+    /*    foreach (var node in Points.Values)
+        {
+            if (node == null)
+            {
+                Debug.Log(" Null NodePoint encountered during pathfinding initialization.");
+                continue; // Skip processing this node
+            }
+            gScoreCache[node] = float.MaxValue;
+            previousCache[node] = null;
+        }
+    */
+
+        gScoreCache[start] = 0;
+        NodePoint lastProcessedNode = start;
+
+        // Priority queue (min-heap) to store the nodes that are explored
+        //last processed node is used as a fallback path if no path found 
+        openSetCache.Enqueue(start, 0);
+
+        while (openSetCache.Count > 0)
+        {
+            openSetCache.TryDequeue(out NodePoint current, out float currentDistance);
+            if (current == end) break;
+            // Optimization: If we found a shorter path to this node already in closed set, skip
+            if (closedSetCache.Contains(current)) continue;
+            //Why did you delete  this
+            //   closedSetCache.Add(current);
+            lastProcessedNode = current;
+
+            foreach (var neighbourPair in current.Neighbours)
+            {
+                NodePoint neighbour = neighbourPair.Key;
+
+                //WHY WAS THIS REMOVED
+                /* if (closedSetCache.Contains(neighbour))
+                 {
+                     continue; // Skip this neighbour  it was already evaluated
+
+                 }
+                */
+                // Current cost to get here
+                if (!gScoreCache.TryGetValue(current, out float currentG))
+                    currentG = float.MaxValue;
+                float tentativeGScore = currentG + neighbourPair.Value;
+                // float tentativeGScore = gScoreCache[current] + neighbourPair.Value;
+                // Check if we found a better path
+                // Note: If key doesn't exist, TryGetValue returns false and 0 (or we treat as MaxValue)
+                float neighborCurrentG = float.MaxValue;
+                if (gScoreCache.TryGetValue(neighbour, out float val))
+                    neighborCurrentG = val;
+
+                if (tentativeGScore < neighborCurrentG)
+                {
+                    previousCache[neighbour] = current;
+                    gScoreCache[neighbour] = tentativeGScore;
+                    float heuristicValue = Vector3.Distance(neighbour.Position, end.Position);
+                    float fScore = (tentativeGScore + heuristicValue) * GetWeightForPoint(current, entityType);
+                    lastProcessedNode = current;
+
+                    //a*
+                    openSetCache.Enqueue(neighbourPair.Key, fScore);
+                }
+            }
+        }
+        //old code
+        //List<Vector3> path = ReconstructPath(previousCache, start, end);
+        //if (path.Count <= 0) path = ReconstructPath(previousCache, start, lastProcessedNode);
+
+        // return path;
+        if (previousCache.ContainsKey(end))
+        {
+            return ReconstructPath(previousCache, start, end);
+        }
+
+        // 2. Fallback: Try to go to the last valid node we found (Partial path)
+        if (lastProcessedNode != null && lastProcessedNode != start)
+        {
+            // Optional: Log warning only if debugging
+            // Debug.LogWarning($"Path incomplete. Using partial path to {lastProcessedNode.Position}");
+            return ReconstructPath(previousCache, start, lastProcessedNode);
+        }
+
+        // 3. Total failure
+        return null;
     }
 
     public List<Vector3> ReconstructPath(Dictionary<NodePoint, NodePoint> previous, NodePoint start, NodePoint end)
     {
+        // Check if a path exists once
+        if (!previous.ContainsKey(end) && start != end) return null;
+
         List<Vector3> path = new List<Vector3>();
         NodePoint current = end;
 
-        while (current != null)
+        // Safety guard against infinite loops in complex graphs
+        int safeGuard = 0;
+        int maxSteps = 10000;
+
+        while (current != null && current != start && safeGuard < maxSteps)
         {
+            path.Add(current.Position);
 
-            if (!previous.ContainsKey(end))
+            if (previous.TryGetValue(current, out NodePoint prevNode))
             {
-                Debug.LogError("No path exists to the end node.");
-                return new List<Vector3>(); // Return an empty path
-            }
-
-            if (previous.ContainsKey(current))
-            {
-                current = previous[current];
-                if (current != null)
-                    path.Add(current.Position);
-
+                current = prevNode;
             }
             else
             {
-                break;
+                break; // Should stop here if we reached the start node's entry (or if the path broke)
             }
-
-
+            safeGuard++;
         }
-        if (current == null)
+
+        // Only add start if the reconstruction loop completed successfully or if start==end
+        if (current == start || safeGuard == 0)
         {
             path.Add(start.Position);
         }
@@ -393,8 +487,9 @@ public class AStar
 
             foreach (var node in allNodesOnTile)
             {
-                List<Vector3> neighbourPositions = tree.RadialSearch(node.Position, NEIGHBOUR_SEARCH_RADIUS);
-                foreach (var neighbourPos in neighbourPositions)
+                tree.RadialSearch(node.Position, NEIGHBOUR_SEARCH_RADIUS, cachedNeighborList);
+                //  List<Vector3> neighbourPositions = tree.RadialSearch(node.Position, NEIGHBOUR_SEARCH_RADIUS, null);
+                foreach (var neighbourPos in cachedNeighborList)
                 {
                     AddNeighbour(node.Position, neighbourPos);
                 }

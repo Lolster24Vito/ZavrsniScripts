@@ -2,6 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Unity.Entities;
+using Unity.Mathematics;
 
 public class PedestrianSpawner : MonoBehaviour
 {
@@ -11,8 +13,8 @@ public class PedestrianSpawner : MonoBehaviour
 
 
 
-    private static int pedestrianNumberToSpawn = 20;
-    private static int carNumberToSpawn = 20;
+    private static int pedestrianNumberToSpawn = 2;
+    private static int carNumberToSpawn = 2;
 
 
     private Transform tileContainer;
@@ -84,7 +86,84 @@ public class PedestrianSpawner : MonoBehaviour
             HandlePlayerTileChanged(TileManager.PlayerOnTile);
         }
     }
+    public void SpawnEntities()
+    {
+        int toSpawnNumber = getSpawnNumber();
 
+        var entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
+
+        // You need to get the Entity version of your Prefab. 
+        // You can do this by baking a "Config" object or converting the prefab once.
+        // For simplicity, assume you have a reference to the Baked Entity Prefab:
+        //todo VITO 
+        // Entity pedestrianPrefabEntity = PedestrianConfigAuthoring.Get(entityType);
+        // --- FIX STARTS HERE ---
+
+        // 1. Get the Singleton Entity that holds the Config
+        // We use a query to find the ONE entity that has the PedestrianConfig component.
+        Entity configEntity = Entity.Null;
+
+        try
+        {
+            // This throws an exception if the entity doesn't exist yet (e.g., SubScene not loaded)
+            // So we use a query to check safely.
+            var query = entityManager.CreateEntityQuery(typeof(PedestrianConfig));
+            if (query.IsEmpty)
+            {
+                Debug.LogWarning("PedestrianConfig not found! Is the Config SubScene loaded?");
+                return;
+            }
+            configEntity = query.GetSingletonEntity();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Error finding PedestrianConfig: {e.Message}");
+            return;
+        }
+
+        // 2. Read the Component Data
+        PedestrianConfig configData = entityManager.GetComponentData<PedestrianConfig>(configEntity);
+
+        // 3. Select the correct prefab based on this Spawner's type
+        Entity prefabEntityToSpawn = (entityType == EntityType.Pedestrian)
+                                     ? configData.PedestrianPrefab
+                                     : configData.CarPrefab;
+
+        // --- FIX ENDS HERE ---
+        for (int i = 0; i < toSpawnNumber; i++)
+        {
+            NodePoint point = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, currentTile);
+            if (point == null) continue;
+
+            // Create a Request Entity
+            Entity requestEntity = entityManager.CreateEntity();
+            entityManager.AddComponentData(requestEntity, new SpawnPedestrianRequest
+            {
+                PrefabToSpawn = prefabEntityToSpawn,
+                Position = point.Position - worldOffset,
+                Rotation = quaternion.identity,
+                TileIndex = currentTile,
+                NpcType = entityType
+            });
+        }
+
+    }
+    private int getSpawnNumber()
+    {
+        int toSpawnNumber = 0;
+        if (entityType.Equals(EntityType.Pedestrian))
+        {
+            toSpawnNumber = pedestrianNumberToSpawn;
+        }
+        if (entityType.Equals(EntityType.Car))
+        {
+            toSpawnNumber = carNumberToSpawn;
+        }
+
+        return toSpawnNumber;
+    }
+
+    /* //old monobehaviour spawner
     private void SpawnEntities()
     {
         NodePoint lastNode = null;
@@ -142,6 +221,7 @@ public class PedestrianSpawner : MonoBehaviour
             //  Debug.Log($"VITO Spawned object's random position: {randomPosition.ToString()}");
         }
     }
+    */
 
     private void CreateTileContainer()
     {
@@ -168,7 +248,7 @@ public class PedestrianSpawner : MonoBehaviour
         if (!isActive)
         {
             ReturnAllNpcsToPool();
-            Destroy(tileContainer.gameObject,4);
+            Destroy(tileContainer.gameObject, 4);
         }
         if (isActive && tileContainer.childCount == 0)
         {

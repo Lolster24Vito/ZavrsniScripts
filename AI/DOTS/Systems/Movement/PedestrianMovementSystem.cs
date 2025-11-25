@@ -2,8 +2,8 @@ using Unity.Burst;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
-using AI.DOTS.Components;
 using Unity.Collections;
+using Assets.Scripts.AI.DOTS.Components;
 
 namespace AI.DOTS.Systems.Movement
 {
