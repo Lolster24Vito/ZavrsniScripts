@@ -1,6 +1,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Collections;
+using Unity.Entities;
+using Unity.Scenes;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Utils;
@@ -37,14 +40,23 @@ public class TileManager : MonoBehaviour
     [SerializeField] private int criticalPerformanceThreshold = 1; // Below this, only player tile is kept
     // track the offset from the time  it is spawned  and use that for the pedestrian calculation of the path  because of world relocation due to floating origin point.
 
-    public static Dictionary<Vector2Int, Vector3> EntityWorldRecenterOffsets { get; private set; } = new Dictionary<Vector2Int, Vector3>();
-  
+    //old code
+    //public static Dictionary<Vector2Int, Vector3> EntityWorldRecenterOffsets { get; private set; } = new Dictionary<Vector2Int, Vector3>();
+    // A static getter to let the System access the NativeHashMap instance.
+    // This is still managed, but it will be called from the System's Update, not the Job.
+
+    private World world;
+    private Entity tileOffsetSingletonEntity;
+    private bool isDataInitialized = false;
+
     private float halfTileWidth;
     private float halfTileHeight;
     private float sqrLoadRadius;
     private float sqrUnloadRadius; // Pre-calculated squared radius
 
-   // public Unity.Scenes.SceneHandle loadedSubSceneHandle; //THIS IS WHAT GEMINI SUGGESTED IT's OUTDATED WITH MY 1.0 or newer dots.
+    // public Unity.Scenes.SceneHandle loadedSubSceneHandle; //THIS IS WHAT GEMINI SUGGESTED IT's OUTDATED WITH MY 1.0 or newer dots.
+    private SceneSystem sceneSystem;
+    private bool firstTileLoading = true;
 
     public void IncreaseMaxOpenScenes()
     {
@@ -58,10 +70,12 @@ public class TileManager : MonoBehaviour
     {
         return maxOpenScenes;
     }
+   
 
     void Start()
     {
-        // Calculate these ONCE at startup
+        StartCoroutine(InitializeWhenReady());
+      /*  // Calculate these ONCE at startup
         halfTileWidth = tileWidth * 0.5f;
         halfTileHeight = tileHeight * 0.5f;
 
@@ -80,22 +94,77 @@ public class TileManager : MonoBehaviour
 
             }
         }
+        
 
         StartCoroutine(CheckTiles());
-
+      */
     }
-    public static void SetOffset(Vector3 offset, Vector2Int tile)
+
+    private IEnumerator InitializeWhenReady()
     {
-        EntityWorldRecenterOffsets[tile] = offset;
-        Debug.Log($"VITO Set offset {offset} for tile {tile}");
+        Debug.Log("[TileManager] Waiting for DOTS initialization...");
+
+        // Wait for DOTS world to be ready
+        while (!DOTSInitializer.IsInitialized)
+        {
+            yield return null;
+        }
+
+        // Now safely initialize DOTS components
+        world = World.DefaultGameObjectInjectionWorld;
+
+        // Wait for TileOffsetSingletonTag to be baked and available
+        var singletonQuery = world.EntityManager.CreateEntityQuery(typeof(TileOffsetSingletonTag));
+        int maxWaitFrames = 60; // 1 second timeout
+        int framesWaited = 0;
+
+        while (singletonQuery.IsEmpty && framesWaited < maxWaitFrames)
+        {
+            framesWaited++;
+            yield return null;
+        }
+
+        if (!singletonQuery.IsEmpty)
+        {
+            tileOffsetSingletonEntity = singletonQuery.GetSingletonEntity();
+            world.EntityManager.AddComponentData(tileOffsetSingletonEntity, new TileOffsetData
+            {
+                Offsets = new NativeHashMap<Vector2Int, Vector3>(128, Allocator.Persistent)
+            });
+            isDataInitialized = true;
+            Debug.Log("[TileManager] DOTS Offset Data Initialized");
+        }
+        else
+        {
+            Debug.LogError("TileOffsetSingletonTag not found after waiting. Check TileOffsetAuthoring setup.");
+        }
+
+        // Continue with your existing initialization
+        halfTileWidth = tileWidth * 0.5f;
+        halfTileHeight = tileHeight * 0.5f;
+        sqrLoadRadius = loadRadius * loadRadius;
+        // Calculate squared radius once so we don't do (radius * radius) in the loop
+        sqrUnloadRadius = unloadRadius * unloadRadius;
+
+        // Initialize the tile status dictionary
+        for (int x = 0; x <= gridSize.x; x++)
+        {
+            for (int y = 0; y <= gridSize.y; y++)
+            {
+                Vector2Int tile = new Vector2Int(x, y);
+                loadedTiles[tile] = false;
+                tilePriorities[tile] = 0;
+
+            }
+        }
+
+
+        StartCoroutine(CheckTiles());
     }
 
-    public static bool TryGetOffset(Vector2Int tile, out Vector3 offset)
-    {
-        return EntityWorldRecenterOffsets.TryGetValue(tile, out offset);
-    }
+        // These are the new internal methods that do the actual work
 
-    private void OnEnable()
+        private void OnEnable()
     {
         WorldRecenterManager.OnWorldRecentered += ApplyWorldRecenterOffset;
     }
@@ -128,7 +197,7 @@ public class TileManager : MonoBehaviour
     {
         // Calculate the center of the tile relative to (0,0,0) of startPos, then apply offset
         Vector3 localTileCenter = new Vector3(
-            startPos.x - (tileCoords.x * tileWidth) - halfTileWidth,
+               startPos.x - (tileCoords.x * tileWidth) - halfTileWidth,
             player.position.y, // Keep the player's Y for distance calculation if tiles are mostly flat
             startPos.z - (tileCoords.y * tileHeight) - halfTileHeight
         );
@@ -150,10 +219,61 @@ public class TileManager : MonoBehaviour
         // Return squared Euclidean distance (a^2 + b^2)
         return dx * dx + dy * dy;
     }
+    public static void SetOffset(Vector3 offset, Vector2Int tile)
+    {
+        var world = World.DefaultGameObjectInjectionWorld;
+        if (world == null) return;
+
+        var query = world.EntityManager.CreateEntityQuery(typeof(TileOffsetSingletonTag));
+        if (query.IsEmpty) return;
+
+        Entity singletonEntity = query.GetSingletonEntity();
+        if (!world.EntityManager.HasComponent<TileOffsetData>(singletonEntity)) return;
+
+        var data = world.EntityManager.GetComponentData<TileOffsetData>(singletonEntity);
+        if (data.Offsets.IsCreated)
+        {
+            // Add or update the value in the NativeHashMap
+            data.Offsets.Remove(tile); // Remove first to ensure no key collision
+            data.Offsets.Add(tile, offset);
+        }
+        Debug.Log($"VITO Set offset {offset} for tile {tile} via static helper.");
+    }
+
+    // NOTE: We don't need the 'internal' version of this method anymore,
+    // as the static method now works by querying the DOTS World directly.
+    public static bool TryGetOffset(Vector2Int tile, out Vector3 offset)
+    {
+        var world = World.DefaultGameObjectInjectionWorld;
+        if (world == null)
+        {
+            offset = Vector3.zero;
+            return false;
+        }
+
+        var query = world.EntityManager.CreateEntityQuery(typeof(TileOffsetSingletonTag));
+        if (query.IsEmpty)
+        {
+            offset = Vector3.zero;
+            return false;
+        }
+
+        Entity singletonEntity = query.GetSingletonEntity();
+        if (world.EntityManager.HasComponent<TileOffsetData>(singletonEntity))
+        {
+            var data = world.EntityManager.GetComponentData<TileOffsetData>(singletonEntity);
+            // Directly reading the NativeHashMap is the right pattern for managed code access.
+            return data.Offsets.TryGetValue(tile, out offset);
+        }
+
+        offset = Vector3.zero;
+        return false;
+    }
 
     IEnumerator CheckTiles()
     {
         yield return new WaitForSeconds(1f);
+        world = World.DefaultGameObjectInjectionWorld;
         while (true)
         {
             UpdatePlayerTile();
@@ -182,7 +302,7 @@ public class TileManager : MonoBehaviour
             };
             foreach (var tile in cardinals)
             {
-                if (tilePriorities.ContainsKey(tile)) tilePriorities[tile] = 4;
+                if (tilePriorities.ContainsKey(tile)) tilePriorities[tile] = 5;
             }
 
             // Priority 3: Diagonals
@@ -253,8 +373,8 @@ public class TileManager : MonoBehaviour
                 // Compare by Distance (Descending, so furthest first)
                 Vector3 cA = GetTileCenterWorldPosition(a);
                 Vector3 cB = GetTileCenterWorldPosition(b);
-                float sqrDistA = Vector3.SqrMagnitude(player.position - cA);
-                float sqrDistB = Vector3.SqrMagnitude(player.position - cB);
+                float sqrDistA = DistanceToTileSq(playerPos2D,  cA);
+                float sqrDistB = DistanceToTileSq(playerPos2D, cB);
 
                 return sqrDistB.CompareTo(sqrDistA);
             });
@@ -265,7 +385,8 @@ public class TileManager : MonoBehaviour
             foreach (var tile in tilesToUnloadCandidates)
             {
                 Vector3 tileCenter = GetTileCenterWorldPosition(tile);
-                float distanceSq = Vector3.SqrMagnitude(player.position - tileCenter);
+                Vector2 tileCenter2D = new Vector2(tileCenter.x, tileCenter.z);
+                float distanceSq = DistanceToTileSq(playerPos2D, tileCenter2D);
 
                 bool outOfBounds = distanceSq > sqrUnloadRadius;
                 bool neededForLimit = tilesUnloaded < numToUnloadDueToLimit;
@@ -324,21 +445,21 @@ public class TileManager : MonoBehaviour
 
     public void PrintEntityWorldRecenterOffsetsDictionary()
     {
-        if (EntityWorldRecenterOffsets == null || EntityWorldRecenterOffsets.Count == 0)
-        {
-            Debug.Log("EntityWorldRecenterOffsets is empty or null.");
-            return;
-        }
+       // if (EntityWorldRecenterOffsets == null || EntityWorldRecenterOffsets.Count == 0)
+       // {
+        //    Debug.Log("EntityWorldRecenterOffsets is empty or null.");
+         //   return;
+       // }
 
         Debug.Log("EntityWorldRecenterOffsets Dictionary Contents:");
 
-        foreach (var entry in EntityWorldRecenterOffsets)
+     /*   foreach (var entry in EntityWorldRecenterOffsets)
         {
             Vector2Int tileKey = entry.Key;
             Vector3 offsetValue = entry.Value;
 
             Debug.Log($"Tile: ({tileKey.x}, {tileKey.y}) => Offset: ({offsetValue.x}, {offsetValue.y}, {offsetValue.z})");
-        }
+        }*/
     }
     private void ManageTileLoading(Vector2Int tile)
     {
@@ -380,45 +501,51 @@ public class TileManager : MonoBehaviour
             }
         }
     }
-
     IEnumerator LoadTile(Vector2Int tile)
     {
-        Debug.Log("In load Tile: " + tile.ToString());
+        // Debug.Log("In load Tile: " + tile.ToString());
         string sceneName = $"{tileScenePrefix}{tile.y}_{tile.x}";
-        if (!DoesSceneExist(sceneName))
+
+        // 1. Check if already loaded
+        if (SceneManager.GetSceneByName(sceneName).isLoaded)
         {
-            Debug.LogWarning($"Scene {sceneName} does not exist.");
+            loadedTiles[tile] = true;
             yield break;
         }
 
-        AsyncOperation loadOperation = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
-        yield return loadOperation;
+        // 2. Load the Standard Unity Scene (Contains Roads, Spawners as GameObjects)
+        AsyncOperation asyncLoad = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
 
-        if (loadOperation.isDone)
+        while (!asyncLoad.isDone)
         {
-            loadedTiles[tile] = true;
-            Debug.Log($"Loaded {sceneName}");
+            yield return null;
         }
+
+        loadedTiles[tile] = true;
+        // Debug.Log($"Loaded {sceneName}");
     }
 
     IEnumerator UnloadTile(Vector2Int tile)
     {
-        Debug.Log("In unload Tile: " + tile.ToString());
-
-        // loadedTiles[tile] = false;
+        // Debug.Log("In unload Tile: " + tile.ToString());
         string sceneName = $"{tileScenePrefix}{tile.y}_{tile.x}";
-        if (!DoesSceneExist(sceneName))
+
+        // 1. Unload Standard Unity Scene
+        Scene scene = SceneManager.GetSceneByName(sceneName);
+        if (scene.isLoaded)
         {
-            Debug.LogWarning($"Scene {sceneName} does not exist.");
-            yield break;
+            AsyncOperation asyncUnload = SceneManager.UnloadSceneAsync(sceneName);
+            while (!asyncUnload.isDone)
+            {
+                yield return null;
+            }
         }
 
-        AsyncOperation unloadOperation = SceneManager.UnloadSceneAsync(sceneName);
-        yield return unloadOperation;
         loadedTiles[tile] = false;
         OnTileUnloaded?.Invoke(tile);
-
+        // Debug.Log($"Unloaded {sceneName}");
     }
+
     private bool DoesSceneExist(string sceneName)
     {
         return SceneUtility.GetBuildIndexByScenePath(sceneName) != -1;
@@ -427,20 +554,17 @@ public class TileManager : MonoBehaviour
     {
         // Get the total world offset from the WorldRecenterManager
         Vector3 totalWorldOffset = WorldRecenterManager.Instance.GetRecenterOffset();
+
         // Account for the world offset
-        //BUG CODE 
-        //  Vector3 originalWorldPosition = playerPosition + worldOffset;
-        //FIXED CODE:
         Vector3 originalWorldPosition = playerPosition + totalWorldOffset;
 
-        // Calculate relative position from the starting position
-        float relativeX = (startPos.x - originalWorldPosition.x);
-        float relativeZ = (startPos.z - originalWorldPosition.z);
+// Calculate relative position from the starting position
+    float relativeX = (originalWorldPosition.x - startPos.x);
+    float relativeZ = (originalWorldPosition.z - startPos.z);
 
         // Calculate the tile indices (ensure proper flooring)
-        int tileX = Mathf.RoundToInt(relativeX / tileWidth);
-        int tileY = Mathf.RoundToInt(relativeZ / tileHeight);
-
+        int tileX = Mathf.FloorToInt(-relativeX / tileWidth);
+        int tileY = Mathf.FloorToInt(-relativeZ / tileHeight);
 
         return new Vector2Int(tileX, tileY);
     }
@@ -520,7 +644,8 @@ public class TileManager : MonoBehaviour
         public int CompareTo(TilePriority other)
         {
             // Higher priority level should come first (negative for descending sort)
-            int priorityComparison = other.PriorityLevel.CompareTo(PriorityLevel);
+             int priorityComparison = PriorityLevel.CompareTo(other.PriorityLevel);
+            // int priorityComparison = other.PriorityLevel.CompareTo(PriorityLevel);
             if (priorityComparison != 0) return priorityComparison;
 
             // If same priority, closer distance should come first

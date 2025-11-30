@@ -13,6 +13,7 @@ public class DotsSpawnerBridge : MonoBehaviour
 
     public void RequestSpawn(EntityType type, Vector2Int tile, Vector3 position)
     {
+        Debug.Log("VITO DELETE ME, IN request spawn for type:" + type.ToString() + " tile:" + tile.ToString() + " position:" + position);
         var entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
 
         // 1. Get the config singleton to know WHICH prefab to spawn

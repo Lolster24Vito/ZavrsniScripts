@@ -193,12 +193,19 @@ public class Pedestrian : MonoBehaviour
                             buffer[i] = p;
                         }
                     }
+                    // 3. Update tile coordinate if needed
+                    if (em.HasComponent<TileCoordinate>(authoring.BakedEntity))
+                    {
+                        var tileCoord = em.GetComponentData<TileCoordinate>(authoring.BakedEntity);
+                        // Update tile coordinate based on new position if needed
+                        em.SetComponentData(authoring.BakedEntity, tileCoord);
+                    }
                 }
             }
         }
     }
 
-    private Vector3 tileManagerOffset;
+    //private Vector3 tileManagerOffset;
 
     public Vector3 getCurrentTarget()
     {
@@ -330,7 +337,7 @@ public class Pedestrian : MonoBehaviour
         Debug.Log("Now really started pedestrian: " + gameObject.name);
         if (useDOTSMovement)
         {
-            EnsureDotsEntityCreated();
+         //   EnsureDotsEntityCreated();
         }
 
         if (isEndPointOnSpawnSet)
@@ -357,7 +364,7 @@ public class Pedestrian : MonoBehaviour
             findingPath = false;
             if (useDOTSMovement)
             {
-                EnsureDotsEntityCreated();
+             //   EnsureDotsEntityCreated();
                 SyncPathToDots();
 
             }
@@ -478,7 +485,7 @@ public class Pedestrian : MonoBehaviour
             Debug.LogError("PedestrianAuthoring component not found");
             return;
         }
-        EnsureDotsEntityCreated();
+        //EnsureDotsEntityCreated();
 
         if (authoring.BakedEntity == Entity.Null)
         {
@@ -834,7 +841,7 @@ public class Pedestrian : MonoBehaviour
     }
     private void EnsureDotsEntityCreated()
     {
-        var authoring = GetComponent<PedestrianAuthoring>();
+      /*  var authoring = GetComponent<PedestrianAuthoring>();
         if (authoring == null) return;
 
         var em = World.DefaultGameObjectInjectionWorld.EntityManager;
@@ -853,6 +860,7 @@ public class Pedestrian : MonoBehaviour
 
         // Initialize Data
         em.SetComponentData(entity, LocalTransform.FromPositionRotation(cachedTransform.position, cachedTransform.rotation));
+        em.AddComponentData(entity, new TileCoordinate { Value = tile });
         em.SetComponentData(entity, new PedestrianData
         {
             MoveSpeed = moveSpeed, // Use the randomized speed
@@ -862,6 +870,6 @@ public class Pedestrian : MonoBehaviour
         });
 
         // Link it back so other methods find it
-        authoring.BakedEntity = entity;
+        authoring.BakedEntity = entity;*/
     }
 }

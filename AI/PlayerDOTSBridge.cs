@@ -1,8 +1,9 @@
+// In PlayerDOTSBridge.cs
+
 using Unity.Entities;
 using Unity.Transforms;
 using Unity.Mathematics;
 using UnityEngine;
-using Unity.Physics;
 
 public class PlayerDOTSBridge : MonoBehaviour
 {
@@ -11,30 +12,48 @@ public class PlayerDOTSBridge : MonoBehaviour
 
     private void Start()
     {
-        entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
-        SpawnGhost();
-        WorldRecenterManager.OnWorldRecentered += ApplyRecenterOffset;
-
+        // We will spawn the ghost in a coroutine to allow the DOTS world to initialize
+        StartCoroutine(SpawnGhostWhenReady());
     }
 
-    private void OnDestroy()
+    private System.Collections.IEnumerator SpawnGhostWhenReady()
     {
-        WorldRecenterManager.OnWorldRecentered -= ApplyRecenterOffset;
-
-        // If it's null, the game is quitting, and the entity is already destroyed anyway.
-        if (World.DefaultGameObjectInjectionWorld == null) return;
-
-        // Cleanup: Don't leave a ghost floating forever if the player quits/dies
-        if (entityManager.Exists(ghostEntity))
+        // Wait until the DOTS world and our config entity are available
+        while (World.DefaultGameObjectInjectionWorld == null || World.DefaultGameObjectInjectionWorld.IsCreated == false)
         {
-            entityManager.DestroyEntity(ghostEntity);
+            yield return null;
         }
+
+        entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
+
+        // Wait until the PedestrianConfig entity from our ConfigSubScene is available
+        Entity configEntity = Entity.Null;
+        while (configEntity == Entity.Null)
+        {
+            var query = entityManager.CreateEntityQuery(typeof(PedestrianConfig));
+            if (!query.IsEmpty)
+            {
+                configEntity = query.GetSingletonEntity();
+            }
+            yield return null; // Wait a frame and check again
+        }
+
+        // Now we can safely spawn the ghost
+        PedestrianConfig config = entityManager.GetComponentData<PedestrianConfig>(configEntity);
+        ghostEntity = entityManager.Instantiate(config.PlayerGhostPrefab);
+
+        // Set Initial Position
+        entityManager.SetComponentData(ghostEntity, LocalTransform.FromPositionRotation(
+            transform.position,
+            transform.rotation
+        ));
+
+        Debug.Log("Player ghost entity spawned successfully!");
     }
 
     private void LateUpdate()
     {
-        // Sync the Real Player's position to the DOTS Ghost
-        if (entityManager.Exists(ghostEntity))
+        if (entityManager != null && entityManager.Exists(ghostEntity))
         {
             entityManager.SetComponentData(ghostEntity, LocalTransform.FromPositionRotation(
                 transform.position,
@@ -43,49 +62,12 @@ public class PlayerDOTSBridge : MonoBehaviour
         }
     }
 
-    private void SpawnGhost()
+    private void OnDestroy()
     {
-        // 1. Get the Config
-        Entity configEntity = Entity.Null;
-        try
+        if (World.DefaultGameObjectInjectionWorld == null) return;
+        if (entityManager != null && entityManager.Exists(ghostEntity))
         {
-            var query = entityManager.CreateEntityQuery(typeof(PedestrianConfig));
-            if (!query.IsEmpty)
-            {
-                configEntity = query.GetSingletonEntity();
-            }
-        }
-        catch { }
-
-        if (configEntity == Entity.Null)
-        {
-            Debug.LogError("PlayerBridge: Could not find PedestrianConfig! Is the SubScene loaded?");
-            return;
-        }
-
-        // 2. Instantiate the Ghost
-        PedestrianConfig config = entityManager.GetComponentData<PedestrianConfig>(configEntity);
-        ghostEntity = entityManager.Instantiate(config.PlayerGhostPrefab);
-
-        // 3. Set Initial Position
-        entityManager.SetComponentData(ghostEntity, LocalTransform.FromPositionRotation(
-            transform.position,
-            transform.rotation
-        ));
-        //todo vito ovo mozda sve zezne
-        // 4. IMPORTANT: Make sure the ghost entity has physics components
-        if (!entityManager.HasComponent<PhysicsVelocity>(ghostEntity))
-        {
-            entityManager.AddComponentData(ghostEntity, new PhysicsVelocity());
-        }
-    }
-    private void ApplyRecenterOffset(Vector3 offset)
-    {
-        if (entityManager.Exists(ghostEntity))
-        {
-            var transform = entityManager.GetComponentData<LocalTransform>(ghostEntity);
-            transform.Position -= (float3)offset;
-            entityManager.SetComponentData(ghostEntity, transform);
+            entityManager.DestroyEntity(ghostEntity);
         }
     }
 }

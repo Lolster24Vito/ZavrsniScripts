@@ -4,6 +4,7 @@ using Unity.Mathematics;
 using Unity.Transforms;
 using Unity.Collections;
 using Assets.Scripts.AI.DOTS.Components;
+using UnityEngine;
 
 namespace AI.DOTS.Systems.Movement
 {
@@ -15,6 +16,7 @@ namespace AI.DOTS.Systems.Movement
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<PedestrianTag>();
+            state.RequireForUpdate<TileOffsetData>();
         }
 
         [BurstCompile]
@@ -23,10 +25,12 @@ namespace AI.DOTS.Systems.Movement
             // REMOVED: Automatic path refilling logic.
             // The system now acts purely as a motor. 
             // If the path index reaches the end, it stops and waits for the MonoBehaviour to push new data.
+            TileOffsetData tileOffsetData = SystemAPI.GetSingleton<TileOffsetData>();
 
             var moveJob = new PedestrianMoveJob
             {
                 DeltaTime = SystemAPI.Time.DeltaTime,
+                TileOffsets = tileOffsetData.Offsets,
             };
 
             state.Dependency = moveJob.ScheduleParallel(state.Dependency);
@@ -38,7 +42,10 @@ namespace AI.DOTS.Systems.Movement
     {
         public float DeltaTime;
 
-        public void Execute(ref LocalTransform transform, ref PedestrianData pedestrianData, in DynamicBuffer<PathElement> pathBuffer)
+        [ReadOnly] public NativeHashMap<Vector2Int, Vector3> TileOffsets; // Requires using Unity.Collections;
+
+        public void Execute(ref LocalTransform transform, ref PedestrianData pedestrianData,
+                            in DynamicBuffer<PathElement> pathBuffer, in TileCoordinate tileCoord)
         {
             // If we have processed all points, stop.
             if (pedestrianData.PathIndex >= pathBuffer.Length)
@@ -46,37 +53,42 @@ namespace AI.DOTS.Systems.Movement
                 return;
             }
 
-            // --- Movement Logic ---
-            float3 targetPosition = pathBuffer[pedestrianData.PathIndex].Position;
-            float3 currentPosition = transform.Position;
-            float3 directionToTarget = targetPosition - currentPosition;
-
-            // Flatten Y for distance check to avoid floating point issues with ground alignment
-            float3 directionFlat = directionToTarget;
-            directionFlat.y = 0;
-
-            float distanceSq = math.lengthsq(directionFlat);
-            float minDistanceSq = pedestrianData.MinDistanceForCompletion * pedestrianData.MinDistanceForCompletion;
-
-            if (distanceSq <= minDistanceSq)
+            // Get tile offset
+            Vector3 tileOffset = Vector3.zero;
+            if (TileOffsets.TryGetValue(tileCoord.Value, out tileOffset))
             {
-                // Reached the point, increment index to move to the next one
-                pedestrianData.PathIndex++;
-                return;
+                // Apply tile offset to current position
+                float3 currentPosition = transform.Position + (float3)tileOffset;
+
+                // Get target position with offset
+                float3 targetPosition = pathBuffer[pedestrianData.PathIndex].Position;
+
+                // Calculate movement
+                float3 directionToTarget = targetPosition - currentPosition;
+                directionToTarget.y = 0; // Keep on ground plane
+
+                float distanceSq = math.lengthsq(directionToTarget);
+                float minDistanceSq = pedestrianData.MinDistanceForCompletion * pedestrianData.MinDistanceForCompletion;
+
+                if (distanceSq <= minDistanceSq)
+                {
+                    // Reached the point, increment index
+                    pedestrianData.PathIndex++;
+                    return;
+                }
+
+                directionToTarget = math.normalize(directionToTarget);
+
+                // Rotation
+                if (math.lengthsq(directionToTarget) > 0.001f)
+                {
+                    quaternion targetRotation = quaternion.LookRotationSafe(directionToTarget, math.up());
+                    transform.Rotation = math.slerp(transform.Rotation, targetRotation, pedestrianData.RotationSpeed * DeltaTime);
+                }
+
+                // Translation (without offset)
+                transform.Position += directionToTarget * pedestrianData.MoveSpeed * DeltaTime;
             }
-
-            directionToTarget = math.normalize(directionToTarget);
-
-            // --- Rotation ---
-            // Only rotate if we are actually moving
-            if (math.lengthsq(directionToTarget) > 0.001f)
-            {
-                quaternion targetRotation = quaternion.LookRotationSafe(directionToTarget, math.up());
-                transform.Rotation = math.slerp(transform.Rotation, targetRotation, pedestrianData.RotationSpeed * DeltaTime);
-            }
-
-            // --- Translation ---
-            transform.Position += directionToTarget * pedestrianData.MoveSpeed * DeltaTime;
         }
     }
 }
