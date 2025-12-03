@@ -7,6 +7,8 @@ using Utils;
 
 public class TileManager : MonoBehaviour
 {
+    public static TileManager Instance { get; private set; }
+
     [Header("Player and Raycasting")]
     public Transform player; // Reference to the player object
     public float raycastDistance = 1000f; // Distance for the downward raycast
@@ -53,7 +55,17 @@ public class TileManager : MonoBehaviour
     {
         return maxOpenScenes;
     }
-
+    private void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
     void Start()
     {
         // Initialize the tile status dictionary
@@ -236,7 +248,7 @@ public class TileManager : MonoBehaviour
             foreach (var tile in loadedTiles)
             {
                 // Skip if it's a priority tile
-           //     if (priorityTiles.Contains(tile.Key)) continue;
+                //     if (priorityTiles.Contains(tile.Key)) continue;
 
                 // Skip if it's already being unloaded
                 if (!tile.Value) continue;

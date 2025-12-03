@@ -33,12 +33,11 @@ public class KDTree
     {
         root = null;
     }
-    public List<Vector3> RadialSearch(Vector3 target, float radius)
+    public void RadialSearch(Vector3 target, float radius, List<Vector3> resultsBuffer)
     {
-        if (root == null) return new List<Vector3>();
-        List<Vector3> results = new List<Vector3>();
-        RadialSearch(root, target, radius * radius, 0, results);
-        return results;
+        resultsBuffer.Clear(); // Clear the reused list
+        if (root == null) return;
+        RadialSearch(root, target, radius * radius, 0, resultsBuffer);
     }
 
     private void RadialSearch(KDTreeNode node, Vector3 target,
@@ -63,4 +62,3 @@ public class KDTree
             RadialSearch(farBranch, target, radiusSquared, depth + 1, results);
     }
 }
-
