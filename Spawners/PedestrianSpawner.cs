@@ -15,8 +15,8 @@ public class PedestrianSpawner : MonoBehaviour
      private float despawnRadius = 1200f;
     private float minSpawnDistance = 10f;
 
-    private static int pedestrianNumberToSpawn = 3;
-    private static int carNumberToSpawn = 3;
+    private static int pedestrianNumberToSpawn = 40;
+    private static int carNumberToSpawn = 40;
 
 
     private Transform tileContainer;
@@ -151,15 +151,21 @@ public class PedestrianSpawner : MonoBehaviour
 
             //GameObject spawnedObject = NpcPoolManager.Instance.GetPedestrian();
             Pedestrian pedestrianScript = spawnedObject.GetComponent<Pedestrian>();
-            pedestrianScript.ActivateFromPool(
-                randomPosition.Position - worldOffset,
-                randomPosition,
-                currentTile
-            );
-        
-                            pedestrianScript.SpawnGroup = true;
+            if (pedestrianScript != null)
+            {
+                pedestrianScript.ActivateFromPool(
+                    randomPosition.Position - worldOffset,
+                    randomPosition,
+                    currentTile
+                );
 
+                pedestrianScript.SpawnGroup = true;
 
+            }
+            else
+            {
+                spawnedObject.transform.position= randomPosition.Position - worldOffset;
+            }
             //old code
             //      spawnedObject.transform.position = randomPosition.Position - worldOffset;
             spawnedObject.transform.parent = tileContainer;
