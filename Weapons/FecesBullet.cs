@@ -14,15 +14,15 @@ public class FecesBullet : MonoBehaviour
     [SerializeField] private bool enableGravityOnLaunch = true; // set true if you want arcs
     private Vector3 direction = Vector3.zero;
 
-    private float bulletSpeed=10f;
-   // private bool isInitialized = false;
+    private float bulletSpeed = 10f;
+    // private bool isInitialized = false;
     private bool hasCollided = false;
     private bool isReturning = false;          // prevents double-return
     private bool pendingStartLife = false;     // used if Initialize is called while inactive
     //decal settings
     private float lastDecalTime = -1f;
     [SerializeField] private float decalCooldown = 0.5f;  // seconds
-    
+
     private Coroutine lifeCoroutine = null;
     private Coroutine returnCoroutine = null;
 
@@ -33,7 +33,7 @@ public class FecesBullet : MonoBehaviour
         rb = GetComponent<Rigidbody>();
         //        Destroy(gameObject, lifeSeconds);
     }
-    public void Initialize(Vector3 position,Vector3 dir,float bulletSpeed)
+    public void Initialize(Vector3 position, Vector3 dir, float bulletSpeed)
     {
         if (rb == null) rb = GetComponent<Rigidbody>();
         this.bulletSpeed = bulletSpeed;
@@ -115,18 +115,35 @@ public class FecesBullet : MonoBehaviour
         {
             hasCollided = true;
             rb.useGravity = true;
-            //optional ignore weak grazes maybe?
-            /* 
-                 // Optional: ignore weak grazing collisions
-    float relVel = collision.relativeVelocity.magnitude;
-    const float minImpactSpeed = 0.1f; // tune as needed
-    if (relVel < minImpactSpeed)
-        return;
-             */
-            //Ragdoll logic
-            if (collision.gameObject.layer == LayerMask.NameToLayer("NPC") ||
-            collision.gameObject.layer == LayerMask.NameToLayer("NPC_Ragdoll"))
+            if (collision.gameObject.tag.Equals("Car"))
             {
+
+                VehicleHitHandler vehicle = collision.gameObject.GetComponent<VehicleHitHandler>();
+                if (vehicle != null)
+                {
+                    vehicle.RegisterHit();
+                    SpawnDecalByCollision(collision); // Just a decal for cars
+                    return;
+                }
+
+            }
+            else
+            if ((collision.gameObject.layer == LayerMask.NameToLayer("NPC") ||
+            collision.gameObject.layer == LayerMask.NameToLayer("NPC_Ragdoll")
+            ))
+            {
+                //Ragdoll logic
+
+                Vector3 impactDir = (collision.transform.position - transform.position).normalized;
+
+                RagdollSwapper.Instance.SwapToRagdoll(
+            collision.gameObject,
+            ragdollImpactForce,
+            collision.GetContact(0).point,
+            impactDir
+        );
+                //old code
+                /*
                 Debug.Log(" ON COLLISION WITH Feces with ragdoll");
                 //forceDirection and flapVelocity get through 
                 Ragdoll collisionRagdoll = collision.gameObject.GetComponentInParent<Ragdoll>();
@@ -136,7 +153,7 @@ public class FecesBullet : MonoBehaviour
                     SpawnDecalByCollision(collision, parentDecals) ;
                 }
                 SpawnDecalByCollision(collision,collision.gameObject.transform);
-
+                */
             }
             else
             {
@@ -151,19 +168,19 @@ public class FecesBullet : MonoBehaviour
 
     }
 
-    private void SpawnDecalByCollision(Collision collision,Transform parent=null)
+    private void SpawnDecalByCollision(Collision collision, Transform parent = null)
     {
         if (Time.time - lastDecalTime > decalCooldown)
         {
             // Spawn bullet decal via manager
             ContactPoint contact = collision.GetContact(0);
             Transform finalParent = collision.transform;
-            
+
             if (parent == null)
             {
                 parent = collision.transform;
             }
-            DecalManager.Instance?.SpawnDecal(contact.point, contact.normal, parent);            
+            DecalManager.Instance?.SpawnDecal(contact.point, contact.normal, parent);
             lastDecalTime = Time.time;
 
         }

@@ -2,7 +2,11 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
+using UnityEngine.ResourceManagement.ResourceProviders;
 using UnityEngine.SceneManagement;
+
 using Utils;
 
 public class TileManager : MonoBehaviour
@@ -15,14 +19,14 @@ public class TileManager : MonoBehaviour
 
     private Vector3 worldOffset = Vector3.zero;
     [Header("Tile Configuration")]
-    public float loadRadius = 20000f; // Radius within which tiles should be loaded
-    public float unloadRadius = 40000f; // Radius beyond which tiles should be unloaded
+    public float loadRadius = 6000; // Radius within which tiles should be considered by distance to be loaded //20000f bakup
+    public float unloadRadius = 12000f; // Radius beyond which tiles should be considered by distance to be unloaded //400f bakup
     public Vector2Int gridSize = new Vector2Int(11, 11); // Grid size (e.g., 11x11)
     public string tileScenePrefix = "tile_"; // Prefix for tile scenes (e.g., tile_0_0)
 
     private const float tileWidth = 10591.83f;
     private const float tileHeight = 10219.93f;
-    private readonly Vector3 startPos = new Vector3(59462, 215, 44170);
+    private static readonly Vector3 startPos = new Vector3(59462, 215, 44170);
 
     public static event Action<Vector2Int> OnTileUnloaded; // Event to notify listeners about a new tile being destroyed
     public static event Action<Vector2Int> OnPlayerTileChanged;
@@ -30,7 +34,7 @@ public class TileManager : MonoBehaviour
     public static Vector2Int PlayerOnTile;
     private Vector2Int previousPlayerTile;
 
-    private Dictionary<Vector2Int, bool> loadedTiles = new Dictionary<Vector2Int, bool>();
+    public Dictionary<Vector2Int, bool> loadedTiles = new Dictionary<Vector2Int, bool>();
     private Dictionary<Vector2Int, int> tilePriorities = new Dictionary<Vector2Int, int>();
 
     private Vector3 tileCenter;
@@ -41,8 +45,14 @@ public class TileManager : MonoBehaviour
 
     public static Dictionary<Vector2Int, Vector3> EntityWorldRecenterOffsets { get; private set; } = new Dictionary<Vector2Int, Vector3>();
 
-    // Adds or updates the offset for a given tile
+    // New dictionary to store the "Receipts" (Handles) for unloading later
+    private Dictionary<Vector2Int, AsyncOperationHandle<SceneInstance>> sceneHandles = new Dictionary<Vector2Int, AsyncOperationHandle<SceneInstance>>();
 
+    // Adds or updates the offset for a given tile
+    //here for getting values for debugging tools
+    public static float TileWidth => tileWidth;  // 10591.83f
+    public static float TileHeight => tileHeight; // 10219.93f
+    public static Vector3 StartPos => startPos;   // (59462, 215, 44170)
     public void IncreaseMaxOpenScenes()
     {
         maxOpenScenes++;
@@ -108,7 +118,22 @@ public class TileManager : MonoBehaviour
         //bug worldOffset = offset;
     }
     [SerializeField] private GameObject spawnDebugCube;
-    bool spawnedDebugCubeOnce = false;
+    /*private Vector2 GetTileCenter2D(Vector2Int tile)
+    {
+        Vector3 totalOffset = WorldRecenterManager.Instance.GetRecenterOffset();
+        // Using your established startPos logic:
+        float x = startPos.x - totalOffset.x - (tile.x * tileWidth) - (tileWidth * 0.5f);
+        float z = startPos.z - totalOffset.z - (tile.y * tileHeight) - (tileHeight * 0.5f);
+        return new Vector2(x, z);
+    }*/
+    private Vector2 GetTileCenter2D(Vector2Int tile, Vector3 currentOffset)
+    {
+        // Match the Visualizer's definition exactly: the position is effectively the top-right corner of the tile box
+        float x = startPos.x - currentOffset.x - (tile.x * tileWidth);
+        float z = startPos.z - currentOffset.z - (tile.y * tileHeight);
+        return new Vector2(x, z);
+    }
+
     private float DistanceToTile(Vector2 point, Vector2 tileCenter, float width, float height)
     {
         float halfWidth = width / 2f;
@@ -117,6 +142,20 @@ public class TileManager : MonoBehaviour
         float dz = Mathf.Max(Mathf.Abs(point.y - tileCenter.y) - halfHeight, 0); // note: y represents z here
         return Mathf.Sqrt(dx * dx + dz * dz);
     }
+    private float GetEdgeDistanceWithOffset(Vector2 playerPos, Vector2Int tile, Vector3 currentOffset)
+    {
+        // 1. Calculate Center in current shifted world space
+        Vector2 center = GetTileCenter2D(tile, currentOffset);
+
+        // 2. Point-to-AABB Math
+        float halfW = tileWidth / 2f;
+        float halfH = tileHeight / 2f;
+
+        float dx = Mathf.Max(Mathf.Abs(playerPos.x - center.x) - halfW, 0);
+        float dy = Mathf.Max(Mathf.Abs(playerPos.y - center.y) - halfH, 0);
+
+        return Mathf.Sqrt(dx * dx + dy * dy);
+    }
     IEnumerator CheckTiles()
     {
         yield return new WaitForSeconds(1f);
@@ -124,115 +163,63 @@ public class TileManager : MonoBehaviour
         {
             UpdatePlayerTile();
 
-
-            // Create a copy of the keys to avoid modifying the dictionary while iterating
-            List<Vector2Int> tilesToCheck = new List<Vector2Int>(loadedTiles.Keys);
+            // Prepare data
+            Vector2Int playerTileCoords = PlayerOnTile;
             Vector2 playerPos2D = new Vector2(player.position.x, player.position.z);
             worldOffset = WorldRecenterManager.Instance.GetRecenterOffset();
 
-            Vector2Int playerTileCoords = GetTileOfPosition(player.position);
-
-            // Define priority groups
-            List<Vector2Int> priorityTiles = new List<Vector2Int>();
-            // Reset all priorities
-            foreach (var tile in tilesToCheck)
+            // --- 1. ALWAYS LOAD PLAYER'S TILE FIRST ---
+            if (!loadedTiles[playerTileCoords])
             {
-                tilePriorities[tile] = 0;
+          //      Debug.Log($"CRITICAL: Loading player's tile {playerTileCoords}");
+                loadedTiles[playerTileCoords] = true;
+                StartCoroutine(LoadTile(playerTileCoords));
             }
 
-            // First priority: player's tile
-            priorityTiles.Add(playerTileCoords);
-            // Second priority: adjacent tiles in cardinal directions
-            priorityTiles.Add(new Vector2Int(playerTileCoords.x - 1, playerTileCoords.y)); // Left
-            priorityTiles.Add(new Vector2Int(playerTileCoords.x + 1, playerTileCoords.y)); // Right
-            priorityTiles.Add(new Vector2Int(playerTileCoords.x, playerTileCoords.y - 1)); // Down
-            priorityTiles.Add(new Vector2Int(playerTileCoords.x, playerTileCoords.y + 1)); // Up
+            // Count loaded tiles
+            int loadedCount = 0;
+            foreach (var t in loadedTiles) if (t.Value) loadedCount++;
 
-            foreach (var tile in priorityTiles)
-            {
-                if (tilePriorities.ContainsKey(tile))
-                {
-                    tilePriorities[tile] = 4;
-                }
-            }
-
-            Vector2Int[] diagonalTiles = {
-                new Vector2Int(playerTileCoords.x - 1, playerTileCoords.y - 1),
-                new Vector2Int(playerTileCoords.x + 1, playerTileCoords.y - 1),
-                new Vector2Int(playerTileCoords.x - 1, playerTileCoords.y + 1),
-                new Vector2Int(playerTileCoords.x + 1, playerTileCoords.y + 1)
-            };
-            foreach (var tile in diagonalTiles)
-            {
-                if (tilePriorities.ContainsKey(tile))
-                {
-                    tilePriorities[tile] = 3;
-                }
-            }
-            //  ensure priority tiles are loaded
-            /*
-            foreach (var tile in priorityTiles)
-            {
-                if (loadedTiles.ContainsKey(tile) && !loadedTiles[tile])
-                {
-                    loadedTiles[tile] = true;
-                    StartCoroutine(LoadTile(tile));
-                }
-            }*/
+            // --- 2. BUILD PRIORITY QUEUE WITH EDGE DISTANCE ---
             PriorityQueue<Vector2Int, TilePriority> tilesQueue = new PriorityQueue<Vector2Int, TilePriority>();
 
-            /*
-                        PriorityQueue<Vector2Int, float> tilesDistance = new PriorityQueue<Vector2Int, float>();
-
-                        foreach (var tile in tilesToCheck)
-                        {
-                            if (priorityTiles.Contains(tile)) continue;
-
-                            Vector3 loopTileCenter = startPos - worldOffset - new Vector3(tile.x * tileWidth, player.position.y, tile.y * tileHeight);
-                            Vector2 tileCenter2D = new Vector2(loopTileCenter.x, loopTileCenter.z);
-                            float edgeDistance = DistanceToTile(playerPos2D, tileCenter2D, tileWidth, tileHeight);
-                            tilesDistance.Enqueue(tile, edgeDistance);
-                        }
-                        spawnedDebugCubeOnce = true;
-            */
-            /// Debug.Log("VITO 0 STOp");
-
-            // PrintEntityWorldRecenterOffsetsDictionary();
-            //  printDistancesQueue(tilesDistance);
-            foreach (var tile in tilesToCheck)
+            // Consider ALL tiles in the grid
+            for (int x = 0; x <= gridSize.x; x++)
             {
-                // Skip if already loaded
-                if (loadedTiles[tile]) continue;
-
-                Vector3 loopTileCenter = startPos - worldOffset - new Vector3(tile.x * tileWidth, player.position.y, tile.y * tileHeight);
-                Vector2 tileCenter2D = new Vector2(loopTileCenter.x, loopTileCenter.z);
-                float edgeDistance = DistanceToTile(playerPos2D, tileCenter2D, tileWidth, tileHeight);
-
-                // Create a composite priority: higher priority for important tiles, and within same priority, closer tiles first
-                TilePriority priority = new TilePriority(tilePriorities[tile], edgeDistance);
-                tilesQueue.Enqueue(tile, priority);
-            }
-
-            int loadedCount = 0;
-            foreach (var tile in loadedTiles)
-            {
-                if (tile.Value)
+                for (int y = 0; y <= gridSize.y; y++)
                 {
-                    loadedCount++;
+                    Vector2Int tile = new Vector2Int(x, y);
+
+                    if (loadedTiles[tile]) continue;
+
+                    //THIS COMMENT IS FALSE.
+                    // Calculate tile corner (not center!) for DistanceToTile
+                    float edgeDistance = GetEdgeDistanceWithOffset(playerPos2D, tile, worldOffset);
+
+                  //  Vector3 tileCorner = startPos - worldOffset - new Vector3(tile.x * tileWidth, player.position.y, tile.y * tileHeight);
+                  //  Vector2 tileCorner2D = new Vector2(tileCorner.x, tileCorner.z);
+
+                    // Calculate EDGE distance (distance from player to tile's edge)
+                  //  float edgeDistance = DistanceToTile(playerPos2D, tileCorner2D, tileWidth, tileHeight);
+
+                    // Only queue tiles within load radius
+                    if (edgeDistance <= loadRadius)
+                    {
+                        // Calculate priority based on tile position relative to player
+                        int priority = CalculateTilePriority(tile, playerTileCoords);
+                        TilePriority tilePriority = new TilePriority(priority, edgeDistance);
+                        tilesQueue.Enqueue(tile, tilePriority);
+
+                       // Debug.Log($"Tile {tile} queued - Edge Distance: {edgeDistance}, Priority: {priority}");
+                    }
                 }
             }
 
+            // --- 3. LOAD TILES FROM QUEUE (up to capacity) ---
             while (tilesQueue.Count > 0 && loadedCount < maxOpenScenes)
             {
                 Vector2Int tileToLoad = tilesQueue.Dequeue();
-                /*
-                 *   // In critical mode, only load the player's tile
-                if (criticalPerformance && tilePriorities[tileToLoad] < 5)
-                {
-                    continue;
-                }
-                 * */
-                //load if not loaded
+
                 if (!loadedTiles[tileToLoad])
                 {
                     loadedTiles[tileToLoad] = true;
@@ -241,70 +228,103 @@ public class TileManager : MonoBehaviour
                 }
             }
 
-            //new code: 30_10
-
-            // Then, check all loaded tiles to see if any should be unloaded
+            // --- 4. UNLOAD TILES USING EDGE DISTANCE ---
             List<Vector2Int> tilesToUnload = new List<Vector2Int>();
-            foreach (var tile in loadedTiles)
+
+            foreach (var kvp in loadedTiles)
             {
-                // Skip if it's a priority tile
-                //     if (priorityTiles.Contains(tile.Key)) continue;
+                if (!kvp.Value) continue;
+                if (kvp.Key == playerTileCoords) continue; // Never unload player's tile
 
-                // Skip if it's already being unloaded
-                if (!tile.Value) continue;
+                /*  // Calculate tile corner for edge distance
+                  Vector3 tileCorner = startPos - worldOffset - new Vector3(kvp.Key.x * tileWidth, player.position.y, kvp.Key.y * tileHeight);
+                  Vector2 tileCorner2D = new Vector2(tileCorner.x, tileCorner.z);
 
-                // Calculate distance to this tile
-                Vector3 tileCenter = startPos - worldOffset - new Vector3(tile.Key.x * tileWidth, player.position.y, tile.Key.y * tileHeight);
-                float distance = Vector3.Distance(player.position, tileCenter);
+                  // Use EDGE distance for unloading decision
+                  float edgeDist = DistanceToTile(playerPos2D, tileCorner2D, tileWidth, tileHeight);
+                */
+                float edgeDist = GetEdgeDistanceWithOffset(playerPos2D, kvp.Key, worldOffset);
 
-                // If beyond unload radius, mark for unloading
-                if (distance > unloadRadius)
+                // Unload if edge is beyond unload radius
+                if (edgeDist > unloadRadius)
                 {
-                    tilesToUnload.Add(tile.Key);
-                } // If we have too many tiles loaded, add lower priority tiles to unload list
-                else if (loadedCount > maxOpenScenes)
-                {
-                    tilesToUnload.Add(tile.Key);
+                    tilesToUnload.Add(kvp.Key);
+                    Debug.Log($"Marking {kvp.Key} for unload - Edge distance: {edgeDist} > {unloadRadius}");
                 }
             }
-            // Sort tiles to unload by priority (lower priority first) and then by distance (farther first)
-            tilesToUnload.Sort((a, b) => {
-                int priorityCompare = tilePriorities[a].CompareTo(tilePriorities[b]);
-                if (priorityCompare != 0) return priorityCompare;
 
-                // If same priority, compare distance
-                Vector3 centerA = startPos - worldOffset - new Vector3(a.x * tileWidth, player.position.y, a.y * tileHeight);
-                Vector3 centerB = startPos - worldOffset - new Vector3(b.x * tileWidth, player.position.y, b.y * tileHeight);
-
-                float distA = Vector3.Distance(player.position, centerA);
-                float distB = Vector3.Distance(player.position, centerB);
-
-                return distB.CompareTo(distA); // Farther first
-            });
-            int tilesToUnloadCount = Mathf.Min(tilesToUnload.Count, loadedCount - maxOpenScenes);
-            for (int i = 0; i < tilesToUnloadCount; i++)
+            // --- 5. ALSO UNLOAD IF OVER CAPACITY (use edge distance for sorting) ---
+            if (loadedCount - tilesToUnload.Count > maxOpenScenes)
             {
-                Vector2Int tile = tilesToUnload[i];
+                List<Vector2Int> unloadCandidates = new List<Vector2Int>();
+                foreach (var kvp in loadedTiles)
+                {
+                    if (kvp.Value && kvp.Key != playerTileCoords && !tilesToUnload.Contains(kvp.Key))
+                    {
+                        unloadCandidates.Add(kvp.Key);
+                    }
+                }
+
+                // Sort by edge distance (farthest edge first)
+                unloadCandidates.Sort((a, b) => {
+                    /*  Vector3 cornerA = startPos - worldOffset - new Vector3(a.x * tileWidth, player.position.y, a.y * tileHeight);
+                      Vector3 cornerB = startPos - worldOffset - new Vector3(b.x * tileWidth, player.position.y, b.y * tileHeight);
+
+                      float edgeDistA = DistanceToTile(playerPos2D, new Vector2(cornerA.x, cornerA.z), tileWidth, tileHeight);
+                      float edgeDistB = DistanceToTile(playerPos2D, new Vector2(cornerB.x, cornerB.z), tileWidth, tileHeight);
+                    */
+                    float distA = GetEdgeDistanceWithOffset(playerPos2D, a, worldOffset);
+                    float distB = GetEdgeDistanceWithOffset(playerPos2D, b, worldOffset);
+                    return distB.CompareTo(distA); // Farthest first
+                });
+
+                int excess = (loadedCount - tilesToUnload.Count) - maxOpenScenes;
+                for (int i = 0; i < excess && i < unloadCandidates.Count; i++)
+                {
+                    tilesToUnload.Add(unloadCandidates[i]);
+                }
+            }
+
+            // --- 6. EXECUTE UNLOADS ---
+            foreach (Vector2Int tile in tilesToUnload)
+            {
+                Debug.Log($"Unloading tile: {tile}");
                 loadedTiles[tile] = false;
                 StartCoroutine(UnloadTile(tile));
-                loadedCount--;
             }
-            /*
 
-                        // Unload marked tiles
-                        foreach (var tile in tilesToUnload)
-                        {
-                            loadedTiles[tile] = false;
-                            StartCoroutine(UnloadTile(tile));
-                            loadedCount--;
-                        }*/
-            // Debug.Log("VITO 1 STOp");
-            //  PrintEntityWorldRecenterOffsetsDictionary();
+            // Debug: Print current state
+            Debug.Log($"Tile state - Loaded: {loadedCount}/{maxOpenScenes}, Player on: {playerTileCoords}");
 
-            yield return new WaitForSeconds(1f); // Delay between checks to reduce CPU usage
+            yield return new WaitForSeconds(1f);
         }
     }
-
+    private int CalculateTilePriority(Vector2Int tile, Vector2Int playerTile)
+{
+    // Priority levels:
+    // 5 = Player's current tile (handled separately)
+    // 4 = Immediate neighbors (up/down/left/right)
+    // 3 = Diagonal neighbors
+    // 2 = Other tiles within 2-tile radius
+    // 1 = All other tiles
+    
+    if (tile == playerTile) return 5;
+    
+    // Check if immediate neighbor
+    int dx = Mathf.Abs(tile.x - playerTile.x);
+    int dy = Mathf.Abs(tile.y - playerTile.y);
+    
+    if (dx <= 1 && dy <= 1)
+    {
+        if (dx == 1 && dy == 1) return 4; // Diagonal
+        if (dx == 1 || dy == 1) return 4; // Adjacent
+    }
+    
+    // Check 2-tile radius
+    if (dx <= 2 && dy <= 2) return 2;
+    
+    return 1; // Far away
+}
     private void printDistancesQueue(PriorityQueue<Vector2Int, float> tilesDistance)
     {
         // Check if the queue is empty first
@@ -399,7 +419,7 @@ public class TileManager : MonoBehaviour
             }
         }
     }
-
+    /*
     IEnumerator LoadTile(Vector2Int tile)
     {
         Debug.Log("In load Tile: " + tile.ToString());
@@ -418,8 +438,30 @@ public class TileManager : MonoBehaviour
             loadedTiles[tile] = true;
             Debug.Log($"Loaded {sceneName}");
         }
+    }*/
+    IEnumerator LoadTile(Vector2Int tile)
+    {
+        string address = $"{tileScenePrefix}{tile.y}_{tile.x}.unity";
+        // Use Addressables for the load
+        var loadOperation = Addressables.LoadSceneAsync(address, LoadSceneMode.Additive);
+        yield return loadOperation;
+
+        if (loadOperation.Status == AsyncOperationStatus.Succeeded)
+        {
+            loadedTiles[tile] = true;
+            sceneHandles[tile] = loadOperation;
+            Debug.Log($"[Addressables] Loaded {address}");
+
+            // NOTE: ObjectOffsetter.Awake() handles the positioning here automatically.
+        }
+        else
+        {
+            Debug.LogError($"Failed to load {address}");
+            loadedTiles[tile] = false;
+        }
     }
 
+    /*
     IEnumerator UnloadTile(Vector2Int tile)
     {
         Debug.Log("In unload Tile: " + tile.ToString());
@@ -437,8 +479,22 @@ public class TileManager : MonoBehaviour
         loadedTiles[tile] = false;
         OnTileUnloaded?.Invoke(tile);
 
+    }*/
+    IEnumerator UnloadTile(Vector2Int tile)
+    {
+        if (sceneHandles.TryGetValue(tile, out var handle))
+        {
+            // Addressables Unload actually wipes the textures from RAM
+            var unloadOp = Addressables.UnloadSceneAsync(handle);
+            yield return unloadOp;
+
+            sceneHandles.Remove(tile);
+            OnTileUnloaded?.Invoke(tile);
+        }
+        loadedTiles[tile] = false;
     }
-    private bool DoesSceneExist(string sceneName)
+
+private bool DoesSceneExist(string sceneName)
     {
         return SceneUtility.GetBuildIndexByScenePath(sceneName) != -1;
     }

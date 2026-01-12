@@ -7,6 +7,7 @@ using UnityEngine;
 using Unity.Entities;
 using Unity.Transforms; // Required for LocalTransform
 using Unity.Mathematics;
+using System.Linq;
 
 public class Pedestrian : MonoBehaviour
 {
@@ -19,12 +20,12 @@ public class Pedestrian : MonoBehaviour
 
     [SerializeField] private Vector3 currentWorldRecenterOffset = Vector3.zero;
 
-    [SerializeField] private NodePoint currentStartNodePoint;
-    [SerializeField] private Vector3 currentTargetDestination = Vector3.zero;
+    [SerializeField] public NodePoint currentStartNodePoint;
+    [SerializeField] protected Vector3 currentTargetDestination = Vector3.zero;
 
-    [SerializeField] private NodePoint currentEndTargetDestination;
+    [SerializeField] protected NodePoint currentEndTargetDestination;
 
-    [SerializeField] private List<Vector3> path = new List<Vector3>();
+    [SerializeField] public List<Vector3> path = new List<Vector3>();
 
     [SerializeField] private List<Vector3> groupNextPath = new List<Vector3>();
     private List<Pedestrian> groupWithSamePath = new List<Pedestrian>();
@@ -32,11 +33,11 @@ public class Pedestrian : MonoBehaviour
     public bool findingPath = false;
     // Offset position by moving slightly in the right local direction when close(on trigger enter) by faster object
     private Vector3 offset;
-    private Vector3 targetWithOffset;
+    protected Vector3 targetWithOffset;
 
     [SerializeField] protected float minDistanceForCompletion = 0.5f;
     private int pathListIndex = 0;
-    private bool firstPathFindCalled = false;
+    protected bool firstPathFindCalled = false;
 
     private Quaternion _lookRotation;
     [SerializeField] private float moveSpeed = 7f;
@@ -54,7 +55,7 @@ public class Pedestrian : MonoBehaviour
     int pathFoundCount = 0;
 
     protected float randomSpeedMinimumOffset = -1f;
-    protected float randomSpeedMaximumOffset = 3f;
+    protected float randomSpeedMaximumOffset = 10f;
 
 
     private CancellationTokenSource pathfindingCancellationTokenSource;
@@ -305,13 +306,15 @@ public class Pedestrian : MonoBehaviour
             cachedTransform.rotation = Quaternion.Slerp(cachedTransform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
         }
     }
+
     private void HandlePathEndAndRefill()
     {
         path.Clear();
         pathListIndex = 0;
 
         Debug.Log($"VITO object {gameObject.name} reached end of path, getting new path");
-        if (groupSpawned && groupNextPath.Count > 1)
+        // Check if we have a queued path from the group leader
+        if (groupSpawned && groupNextPath.Count > 0) 
         {
             path.AddRange(groupNextPath);
             SetPositionAndTeleport(path[0]); 
@@ -320,7 +323,7 @@ public class Pedestrian : MonoBehaviour
 
             return;
         }
-        if (pathFoundCount > 5)//&& !findingPath
+       /* if (pathFoundCount > 5)//&& !findingPath
         {
             Debug.Log($"VITO object {gameObject.name} found path over 5 times");
 
@@ -330,18 +333,20 @@ public class Pedestrian : MonoBehaviour
 //            currentEndTargetDestination = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, tile); //todo change
   //          findingPath = true;
     //        FindPath();
-        }
+        }*/
         if(!findingPath)
         {
             Debug.Log($"VITO object {gameObject.name} not finding path is false, calling findPath");
             pathFoundCount++;
          //   findingPath = true;
             currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);
+            currentEndTargetDestination = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, tile);
             FindPath();
         }
     }
     protected void InitializePathfinding()
     {
+        /*
         if (currentStartNodePoint == null)
             currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);
 
@@ -354,29 +359,29 @@ public class Pedestrian : MonoBehaviour
 
         }
         Debug.Log("Now really started pedestrian: " + gameObject.name);
-
+        */
         if (isEndPointOnSpawnSet)
         {
-            Debug.Log("Vito debug first if TRUE " + gameObject.name);
+            Debug.Log("Vito debug first if isEndPointOnSpawnSet TRUE " + gameObject.name);
             currentEndTargetDestination = GetPositionNodePoint(endPoint);
 
         }
         else
         {
-            Debug.Log("Vito debug first else TRUE " + gameObject.name);
+            Debug.Log("Vito debug first else isEndPointOnSpawnSet TRUE " + gameObject.name);
 
             currentEndTargetDestination = PedestrianDestinations.Instance.GetRandomNodePoint(entityType);
         }
         if (!groupSpawned)
         {
-            Debug.Log("Vito debug 2 if TRUE " + gameObject.name);
+            Debug.Log("Vito debug 2 if TRUE !groupSpawned " + gameObject.name);
 
             FindPath();
 
         }
         else
         {
-            Debug.Log("Vito debug 2 else TRUE " + gameObject.name);
+            Debug.Log("Vito debug 2 else TRUE !groupSpawned " + gameObject.name);
 
             // If groupSpawned is true, the leader has already populated the 'path' list.
             // We just need to sync it to DOTS and ensure the state is correct.
@@ -390,9 +395,11 @@ public class Pedestrian : MonoBehaviour
 
 
     }
-    private NodePoint GetPositionNodePoint(Vector3 position)
+    protected NodePoint GetPositionNodePoint(Vector3 position)
     {
-        Debug.Log($"GetPositionNodePoint VITO object {gameObject.name} is getting position for {position.ToString()}");
+//        Debug.Log($"GetPositionNodePoint VITO object {gameObject.name} is getting position for {position.ToString()}");
+        //  REMOVED the following lines that added an extra offset:
+        /*
         Vector3 tileManagerOffset;
 
         if (TileManager.TryGetOffset(tile, out tileManagerOffset))
@@ -400,7 +407,8 @@ public class Pedestrian : MonoBehaviour
             position += (WorldRecenterManager.Instance.GetCustomWorldOffsetWithoutFirst() - tileManagerOffset);
 
 
-        }
+        }*/
+
         NodePoint returnNodePoint = PedestrianDestinations.Instance.GetPoint(position);
         getPositionNodePointTransformNeighbourPoints.Clear();
 
@@ -420,7 +428,7 @@ public class Pedestrian : MonoBehaviour
                             returnNodePoint = positionNode;
                             break;
                         }
-                        if (entityType.Equals(EntityType.Car) && positionNode.Type.Equals(NodeType.Sidewalk))
+                        if (entityType.Equals(EntityType.Car) && positionNode.Type.Equals(NodeType.Road))
                         {
                             returnNodePoint = positionNode;
                             break;
@@ -442,7 +450,52 @@ public class Pedestrian : MonoBehaviour
         return returnNodePoint;
     }
 
-    protected async void FindPath()
+    protected NodePoint GetPositionNodePointWithNull(Vector3 position)
+    {
+      
+        NodePoint returnNodePoint = PedestrianDestinations.Instance.GetPoint(position);
+        getPositionNodePointTransformNeighbourPoints.Clear();
+
+        if (returnNodePoint == null)
+        {
+            getPositionNodePointTransformNeighbourPoints = PedestrianDestinations.Instance.GetNeighboursRadialSearch(position, 55f);
+
+            if (getPositionNodePointTransformNeighbourPoints != null && getPositionNodePointTransformNeighbourPoints.Count > 0)
+            {
+                foreach (Vector3 neighbourPos in getPositionNodePointTransformNeighbourPoints)
+                {
+                    NodePoint positionNode = PedestrianDestinations.Instance.GetPoint(neighbourPos);
+                    if (positionNode != null)
+                    {
+                        if (entityType.Equals(EntityType.Pedestrian) && positionNode.Type.Equals(NodeType.Sidewalk))
+                        {
+                            returnNodePoint = positionNode;
+                            break;
+                        }
+                        if (entityType.Equals(EntityType.Car) && positionNode.Type.Equals(NodeType.Road))
+                        {
+                            returnNodePoint = positionNode;
+                            break;
+                        }
+                    }
+                }
+                if (returnNodePoint == null)
+                    returnNodePoint = PedestrianDestinations.Instance.GetPoint(getPositionNodePointTransformNeighbourPoints[0]);
+
+            }
+           
+
+        }
+        else
+        {
+            return new NodePoint(position, NodeType.Sidewalk, TileManager.PlayerOnTile);
+        }
+       // Debug.Log($"GetPositionNodePoint VITO object {gameObject.name} return nodePoint: {returnNodePoint.ToString()}");
+
+        return returnNodePoint;
+    }
+
+    public async void FindPath()
     {
         if (findingPath)
         {
@@ -483,17 +536,12 @@ public class Pedestrian : MonoBehaviour
             // CHECK RESULT
             if (newPath != null && newPath.Count > 1)
             {
-//simple new code varient 3_12_2025
+                //simple new code varient 3_12_2025
 
-                 float distanceToFirst = Vector3.Distance(cachedTransform.position, newPath[0]);
-        float distanceToLast = Vector3.Distance(cachedTransform.position, newPath[newPath.Count - 1]);
-
-        // If the last point is closer, then reverse the path
-        if (distanceToLast < distanceToFirst)
-        {
-            Debug.Log($"{gameObject.name}: Path appears to be reversed. Reversing it.");
-            newPath.Reverse();
-        }
+                if (ShouldReversePath(newPath))
+                {
+                    newPath.Reverse();
+                }
 
 
                 //old code backup
@@ -534,7 +582,7 @@ public class Pedestrian : MonoBehaviour
                 Debug.Log($"{gameObject.name}: Path calculation failed or returned empty. Retrying in 0s...");
                 currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);
 
-               // await Task.Delay(1000); // Non-blocking wait
+                await Task.Delay(1000); // Non-blocking wait
                                         // The FixedUpdate loop will pick it up again after this delay
             }
 
@@ -548,7 +596,6 @@ public class Pedestrian : MonoBehaviour
             findingPath = false;
             pathfindingCancellationTokenSource?.Dispose();
             pathfindingCancellationTokenSource = null;
-            Debug.Log($"{gameObject.name}: Pathfinding completed");
 
         }
 
@@ -556,7 +603,19 @@ public class Pedestrian : MonoBehaviour
 
 
     }
+    private bool ShouldReversePath(List<Vector3> pathToCheck)
+    {
+        if (pathToCheck == null || pathToCheck.Count < 2) return false;
 
+        // Convert pedestrian's current position to original world coordinates for comparison
+        Vector3 myOriginalPosition = cachedTransform.position + currentWorldRecenterOffset;
+
+        float distanceToFirst = Vector3.Distance(myOriginalPosition, pathToCheck[0]);
+        float distanceToLast = Vector3.Distance(myOriginalPosition, pathToCheck[pathToCheck.Count - 1]);
+
+        // If the end of the path is significantly closer, it's likely backwards
+        return distanceToLast < distanceToFirst * 0.7f;
+    }
     private void NotifyGroupOfNextPath(List<Vector3> resultPath)
     {
         foreach (Pedestrian pedestrian in groupWithSamePath)
@@ -566,7 +625,7 @@ public class Pedestrian : MonoBehaviour
     }
     public void BeNotifiedOfNextPath(List<Vector3> resultPath)
     {
-        if (path.Count == 0 || pathListIndex == path.Count)
+        if (path.Count == 0 || pathListIndex >= path.Count)
         {
             this.path.Clear();
             pathListIndex = 0;
@@ -589,10 +648,14 @@ public class Pedestrian : MonoBehaviour
             Debug.LogWarning($"Leader {gameObject.name} has no path, cannot spawn group");
             return;
         }
+
         Vector3[] directions = {
             cachedTransform.forward, -cachedTransform.forward,
             cachedTransform.right, -cachedTransform.right
         };
+        List<Pedestrian> newGroupMembers = new List<Pedestrian>();
+        Vector3 currentWorldOffset = WorldRecenterManager.Instance.GetRecenterOffset();
+
         for (int i = 0; i < groupSize; i++)
         {
             Vector3 offsetDirection = directions[i % directions.Length];
@@ -608,8 +671,10 @@ public class Pedestrian : MonoBehaviour
             /*   CharacterController cloneCC = pedestrianClone.GetComponent<CharacterController>();
                if (cloneCC != null) cloneCC.enabled = false;
             */
+            pedestrianClone.name = $"{gameObject.name}_group_num_{i}_tiles_{tile.x}_{tile.y}"; // Better naming
             pedestrianClone.transform.position = cachedTransform.position + groupOffset; // This is the line to modify.
-
+            pedestrianClone.transform.rotation = Quaternion.identity;
+            pedestrianClone.transform.parent = cachedTransform.parent;
             /* if (cloneCC != null)
              {
                  Physics.SyncTransforms();
@@ -619,14 +684,11 @@ public class Pedestrian : MonoBehaviour
             //pedestrianClone.transform.position = cachedTransform.position;
 
             //  pedestrianClone.transform.position = cachedTransform.position + groupOffset;
-            pedestrianClone.transform.rotation = Quaternion.identity;
-            pedestrianClone.transform.parent = cachedTransform.parent;
+
             // GameObject pedestrianClone = Instantiate(gameObject, cachedTransform.position + groupOffset, Quaternion.identity, cachedTransform.parent);
             //            pedestrianClone.name += i.ToString();
-            pedestrianClone.name = $"{gameObject.name}_group_num_{i}_tiles_{tile.x}_{tile.y}"; // Better naming
 
             Pedestrian pedestrianScript = pedestrianClone.GetComponent<Pedestrian>();
-            pedestrianScript.groupSpawned = true;
 
             /* pedestrianScript.ActivateFromPool(
            cachedTransform.position + groupOffset,
@@ -634,33 +696,61 @@ public class Pedestrian : MonoBehaviour
            tile
        );*/
             Debug.Log("Setting pathfinding variables for:" + pedestrianClone.name);
+
+            pedestrianScript.groupSpawned = true;
+            pedestrianScript.tile = tile;
+
+            pedestrianScript.currentEndTargetDestination = currentEndTargetDestination;
+            pedestrianScript.currentStartNodePoint = currentStartNodePoint;
+
             pedestrianScript.path = new List<Vector3>(path);
             pedestrianScript.currentTargetDestination = path[0];
 
             pedestrianScript.pathListIndex = 0;
-            pedestrianScript.groupSpawned = true;
+            pedestrianScript.endPoint = currentEndTargetDestination.Position;
+
             pedestrianScript.SpawnGroup = false;
-            pedestrianScript.tile = tile;
             float waitTime = (i + 1) * 1.5f;
             pedestrianScript.groupIndividualWaitTime = Time.time + waitTime;
-            pedestrianScript.endPoint = currentEndTargetDestination.Position;
+            // Mark as initialized
+            // Store world offset for this pedestrian
+            pedestrianScript.currentWorldRecenterOffset = currentWorldOffset;
             pedestrianScript.firstPathFindCalled = true;
+            newGroupMembers.Add(pedestrianScript);
 
             //new code
             //Set group-specific properties directly
-            pedestrianScript.currentStartNodePoint = currentStartNodePoint;
 
-
-            groupWithSamePath.Add(pedestrianScript);
+            //  groupWithSamePath.Add(pedestrianScript);
             // FIX: Manually call initialization to create the DOTS entity and sync the path
-            pedestrianScript.InitializePathfinding(); // <--- CRITICAL FIX LINE
+            //pedestrianScript.InitializePathfinding(); // <--- CRITICAL FIX LINE
         }
+        // Update group lists for all members
+        List<Pedestrian> allGroupMembers = new List<Pedestrian>(newGroupMembers);
+        allGroupMembers.Add(this); // Add leader last
+
+        foreach (Pedestrian pedestrian in allGroupMembers)
+        {
+            // Clear existing group and add all members
+            pedestrian.groupWithSamePath.Clear();
+            pedestrian.groupWithSamePath.AddRange(allGroupMembers.Where(p => p != pedestrian));
+
+            // Ensure the leader knows about all group members
+            if (pedestrian != this)
+            {
+                pedestrian.groupSpawned = true;
+            }
+        }
+        groupWithSamePath.AddRange(newGroupMembers);
+        SpawnGroup = false;
+        /*
         foreach (Pedestrian pedestrian in groupWithSamePath)
         {
             pedestrian.AddGroup(groupWithSamePath, this);
-        }
-        groupSpawned = true;
+        }*/
     }
+
+
     public void AddGroup(List<Pedestrian> group, Pedestrian caller)
     {
         groupWithSamePath.Add(caller);
@@ -725,9 +815,9 @@ public class Pedestrian : MonoBehaviour
     {
         if (collision.gameObject.layer == LayerMask.NameToLayer("NPC"))
         {
-            Pedestrian çollidedNPC = collision.gameObject.GetComponent<Pedestrian>();
+            Pedestrian collidedNPC = collision.gameObject.GetComponent<Pedestrian>();
 
-            if (moveSpeed > çollidedNPC.GetMoveSpeed())
+            if (collidedNPC != null && moveSpeed > collidedNPC.GetMoveSpeed())
             {
                 currentRightOffset = localRightDirectionOffsetStrength;
             }
@@ -748,29 +838,43 @@ public class Pedestrian : MonoBehaviour
     {
         if (!Application.isPlaying) return;
 
-        // Draw current target
-        if (firstPathFindCalled && currentTargetDestination != Vector3.zero)
+        // Use the same offset calculation that the movement code uses.
+        Vector3 effectiveOffset = WorldRecenterManager.Instance.GetCustomWorldOffsetWithoutFirst();
+        if (TileManager.TryGetOffset(tile, out Vector3 tileManagerOffset))
         {
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawSphere(currentTargetDestination, 0.5f);
-            Gizmos.DrawLine(transform.position, currentTargetDestination);
+            effectiveOffset -= tileManagerOffset;
         }
 
-        // Draw entire path
-        Gizmos.color = Color.blue;
-        for (int i = 0; i < path.Count; i++)
+        // Draw current state
+        Gizmos.color = groupSpawned ? Color.green : Color.red;
+        Gizmos.DrawSphere(transform.position, 0.5f);
+
+        // Draw path with the CORRECT offset adjustment
+        if (path.Count > 0)
         {
-            Gizmos.DrawSphere(path[i], 0.3f);
-            if (i < path.Count - 1)
+            Gizmos.color = Color.blue;
+            for (int i = 0; i < path.Count - 1; i++)
             {
-                Gizmos.DrawLine(path[i], path[i + 1]);
+                // Adjust path points using the same effective offset
+                Vector3 pointA = path[i] - effectiveOffset;
+                Vector3 pointB = path[i + 1] - effectiveOffset;
+                Gizmos.DrawLine(pointA, pointB);
+                Gizmos.DrawSphere(pointA, 0.3f);
             }
+            Vector3 lastPoint = path[path.Count - 1] - effectiveOffset;
+            Gizmos.DrawSphere(lastPoint, 0.5f);
         }
 
-        // Draw target with offset
-        Gizmos.color = Color.red;
-        Gizmos.DrawSphere(targetWithOffset, 0.4f);
+        // Draw target with the CORRECT offset adjustment
+        if (currentTargetDestination != Vector3.zero)
+        {
+            Vector3 targetAdjusted = currentTargetDestination - effectiveOffset;
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawSphere(targetAdjusted, 0.4f);
+            Gizmos.DrawLine(transform.position, targetAdjusted);
+        }
     }
+
     public float GetMoveSpeed()
     {
         return moveSpeed;
@@ -823,6 +927,7 @@ public class Pedestrian : MonoBehaviour
     {
         ResetForPool();
 
+        currentWorldRecenterOffset = WorldRecenterManager.Instance.GetRecenterOffset();//maybe fixes everything maybe breaks everything
         // Set initial state
         SetPositionAndTeleport(spawnPosition);
 

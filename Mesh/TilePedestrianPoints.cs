@@ -140,6 +140,12 @@ public class TilePedestrianPoints : MonoBehaviour
         // ---------------------------------------------------------
         // STEP 3: MAIN THREAD - Apply Results
         // ---------------------------------------------------------
+        if (this == null || gameObject == null || !gameObject.activeInHierarchy)
+        {
+            Debug.LogWarning($"[TilePedestrian] Tile {tile} unloaded during calculation. Aborting.");
+            return;
+        }
+
         Debug.Log($"[Async] Calculation done. Applying {calculatedResults.Count} connections for tile {tile}.");
         var aStar = PedestrianDestinations.Instance.aStar;
         foreach (var result in calculatedResults)

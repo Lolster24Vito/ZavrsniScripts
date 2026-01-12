@@ -5,7 +5,7 @@ using UnityEngine;
 public class ObjectOffsetter : MonoBehaviour
 {
 
-    private void Start()
+    protected virtual void Start()
     {
         WorldRecenterManager.OnWorldRecentered += ApplyOffset;
     }

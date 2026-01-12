@@ -6,7 +6,7 @@ using System.Linq;
 
 public class Ragdoll : MonoBehaviour
 {
-    private enum RagdollState
+    public enum RagdollState
     {
         Walking,
         Ragdoll,
@@ -18,7 +18,7 @@ public class Ragdoll : MonoBehaviour
     private Collider[] rigColliders;
     private Animator animator;
     private CharacterController characterController;
-    private Transform hipsBone;
+   [HideInInspector] public Transform hipsBone;
     private Pedestrian pedestrian;
     private CapsuleCollider capsuleCollider;
 
@@ -26,6 +26,11 @@ public class Ragdoll : MonoBehaviour
     private const string standUpStateName = "Stand Up";
     private float timeToWakeUp = 0f;
     private RagdollState ragdollState;
+
+    public RagdollState GetRagdollState() 
+    {
+        return ragdollState; 
+    }
 
     void Awake()
     {

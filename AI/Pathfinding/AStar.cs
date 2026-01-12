@@ -27,7 +27,7 @@ public class AStar
       = new Dictionary<Vector2Int, Dictionary<EntityType, List<NodePoint>>>();
 
   
-    public static readonly float NEIGHBOUR_SEARCH_RADIUS = 100f;
+    public static readonly float NEIGHBOUR_SEARCH_RADIUS = 70f;
 
     private List<Vector3> cachedNeighborList = new List<Vector3>();
     public AStar()

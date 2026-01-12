@@ -5,18 +5,18 @@ using UnityEngine.SceneManagement;
 
 public class PedestrianSpawner : MonoBehaviour
 {
-    [SerializeField] private int maxAgents = 15; // Total pool size for this spawner
+     private int maxAgents = 30; // Total pool size for this spawner
     [SerializeField] GameObject toSpawn;
-    [SerializeField] EntityType entityType;
-    [SerializeField] Vector2Int currentTile;
+    [SerializeField]public EntityType entityType;
+    [SerializeField]public Vector2Int currentTile;
 
     [Header("Bubble Settings")]
-     private float spawnRadius = 500;
-     private float despawnRadius = 1200f;
-    private float minSpawnDistance = 10f;
+     private float spawnRadius = 250f;
+     private float despawnRadius = 700f;
+    private float minSpawnDistance = 30f;
 
-    private static int pedestrianNumberToSpawn = 40;
-    private static int carNumberToSpawn = 40;
+    private static int pedestrianNumberToSpawn = 33;
+    private static int carNumberToSpawn = 33;
 
 
     private Transform tileContainer;
@@ -27,8 +27,16 @@ public class PedestrianSpawner : MonoBehaviour
     Vector3 worldOffset = Vector3.zero;
     [SerializeField] private bool useDOTSMovement = true;
 
-    private List<GameObject> activeAgents = new List<GameObject>();
+    public List<GameObject> activeAgents = new List<GameObject>();
     private Transform playerTransform;
+    public int ActiveAgentsCount => activeAgents.Count;
+    //methods for getting values for debugging.
+    public float SpawnRadius => spawnRadius;
+    public float DespawnRadius => despawnRadius;
+    public float MinSpawnDistance => minSpawnDistance;
+    public Vector3 WorldOffset => worldOffset;
+    public Transform PlayerTransform => playerTransform;
+
 
     private void OnEnable()
     {
@@ -63,7 +71,9 @@ public class PedestrianSpawner : MonoBehaviour
     }
     private void HandleWorldRecentered(Vector3 obj)
     {
-        worldOffset -= obj;
+        //wrong
+        //  worldOffset -= obj;
+        worldOffset += obj; //right?
     }
 
     private void OnDestroy()
@@ -100,6 +110,31 @@ public class PedestrianSpawner : MonoBehaviour
     }
     private void Update()
     {
+        if (playerTransform == null) return;
+
+        float despawnRadiusSq = despawnRadius * despawnRadius;
+        Vector3 playerPos = playerTransform.position;
+
+        // Iterate backwards to safely remove
+        for (int i = activeAgents.Count - 1; i >= 0; i--)
+        {
+            GameObject agent = activeAgents[i];
+            if (agent == null || !agent.activeSelf)
+            {
+                activeAgents.RemoveAt(i);
+                continue;
+            }
+
+            float distSq = (playerPos - agent.transform.position).sqrMagnitude;
+            if (distSq > despawnRadiusSq)
+            {
+                ReturnAgentToPool(agent);      
+                activeAgents.RemoveAt(i);   
+                                                // RespawnAgentNearPlayer(agent);
+            }
+        }
+        //old code
+        /*
         // Check distances and reposition agents outside despawn radius
         for (int i = 0; i < activeAgents.Count; i++)
         {
@@ -112,7 +147,7 @@ public class PedestrianSpawner : MonoBehaviour
             {
                 RespawnAgentNearPlayer(agent);
             }
-        }
+        }*/
     }
 
     private void SpawnEntities()
@@ -154,7 +189,7 @@ public class PedestrianSpawner : MonoBehaviour
             if (pedestrianScript != null)
             {
                 pedestrianScript.ActivateFromPool(
-                    randomPosition.Position - worldOffset,
+                    randomPosition.Position,
                     randomPosition,
                     currentTile
                 );
@@ -207,7 +242,12 @@ public class PedestrianSpawner : MonoBehaviour
         }
         if (isActive && tileContainer.childCount == 0)
         {
-            SpawnEntities();
+            int toSpawn = maxAgents - activeAgents.Count;
+            for (int i = 0; i < toSpawn; i++)
+            {
+                SpawnAgent(); // This calls RespawnAgentNearPlayer
+            }
+            // SpawnEntities();
         }
     }
     public static int GetPedestrianNumberToSpawn()
@@ -329,6 +369,8 @@ public class PedestrianSpawner : MonoBehaviour
     }
     private Vector3 FindValidSpawnPosition(Vector3 playerPos)
     {
+        Vector3 searchPos = playerPos + worldOffset;
+
         // Try multiple times to find a good spawn position
         for (int attempt = 0; attempt < 10; attempt++)
         {
@@ -337,20 +379,17 @@ public class PedestrianSpawner : MonoBehaviour
             Vector3 randomDirection = new Vector3(randomCircle.x, 0, randomCircle.y);
             float distance = Random.Range(minSpawnDistance, spawnRadius);
 
-            Vector3 candidatePos = playerPos + (randomDirection * distance);
+            Vector3 candidatePos = searchPos + (randomDirection * distance);
 
-            // Check if position is on valid terrain and not too steep
-            if (IsValidSpawnLocation(candidatePos))
+            // Get nearest node point to ensure it's on a valid path
+            NodePoint nearestNode = GetNearestNodePoint(candidatePos);
+            if (nearestNode != null)
             {
-                // Get nearest node point to ensure it's on a valid path
-                NodePoint nearestNode = GetNearestNodePoint(candidatePos);
-                if (nearestNode != null)
-                {
-                    return nearestNode.Position;
-                }
+                return nearestNode.Position;
             }
-        }
 
+        }
+        Debug.Log("Spawner in fallback for findValidPosition");
         // Fallback: Use KDTree radial search
         List<Vector3> nearbyPoints = new List<Vector3>();
         if (PedestrianDestinations.Instance != null && PedestrianDestinations.Instance.tree != null)
@@ -366,8 +405,11 @@ public class PedestrianSpawner : MonoBehaviour
                 }
             }
         }
-
-        return Vector3.zero;
+        // If still no valid position found, get a random node point from current tile
+        Debug.LogWarning("Could not find valid spawn position using KDTree, falling back to random tile node");
+        NodePoint randomNode = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, currentTile);
+        return randomNode != null ? randomNode.Position : Vector3.zero;
+        //return Vector3.zero;
     }
 
     private NodePoint GetNearestNodePoint(Vector3 position)
@@ -377,7 +419,7 @@ public class PedestrianSpawner : MonoBehaviour
         if (PedestrianDestinations.Instance != null && PedestrianDestinations.Instance.tree != null)
         {
             // Search in a small radius
-            PedestrianDestinations.Instance.tree.RadialSearch(position, 10f, nearbyPoints);
+            PedestrianDestinations.Instance.tree.RadialSearch(position, 50f, nearbyPoints);
 
             if (nearbyPoints.Count > 0)
             {
@@ -455,4 +497,16 @@ public class PedestrianSpawner : MonoBehaviour
             Gizmos.DrawWireSphere(playerTransform.position, minSpawnDistance);
         }
     }
+    /*
+    private void OnGUI()
+    {
+        GUI.Label(new Rect(10, 10, 500, 30), $"World Offset: {worldOffset}");
+        GUI.Label(new Rect(10, 30, 500, 30), $"Active Agents: {activeAgents.Count}");
+
+        if (playerTransform != null)
+        {
+            GUI.Label(new Rect(10, 50, 500, 30), $"Player Pos (current): {playerTransform.position}");
+            GUI.Label(new Rect(10, 70, 500, 30), $"Player Pos (original): {playerTransform.position + worldOffset}");
+        }
+    }*/
 }
