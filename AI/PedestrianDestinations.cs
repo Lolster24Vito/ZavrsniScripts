@@ -21,12 +21,13 @@ public class PedestrianDestinations : MonoBehaviour
     private double lastInterval;
     private bool isPathFindingReady = false;
 
+    private List<Vector3> cachedNeighborList = new List<Vector3>();
     internal void ClearPoints()
     {
-        if(aStar!=null)
-        aStar.ClearPoints();
-        if(tree!=null)
-        tree.ClearTree();
+        if (aStar != null)
+            aStar.ClearPoints();
+        if (tree != null)
+            tree.ClearTree();
     }
 
     private CancellationTokenSource tokenSource;
@@ -35,6 +36,11 @@ public class PedestrianDestinations : MonoBehaviour
     public bool IsPathFindingReady()
     {
         return isPathFindingReady;
+    }
+    public void SetPathFindingReady(bool ready)
+    {
+        isPathFindingReady = ready;
+        Debug.Log($"Pathfinding system readiness set to: {ready}");
     }
 
 
@@ -58,6 +64,7 @@ public class PedestrianDestinations : MonoBehaviour
     public void RemovePointsOnTile(Vector2Int tile)
     {
         aStar.RemovePoints(tile);
+        UpdateGlobalKDTree();
     }
 
     private void OnDisable()
@@ -116,7 +123,7 @@ public class PedestrianDestinations : MonoBehaviour
         // Create a new CancellationTokenSource
         tokenSource = new CancellationTokenSource();
 
-       InitializeNeighboursAsync(tokenSource.Token);
+        InitializeNeighboursAsync(tokenSource.Token);
     }
     private async void InitializeNeighboursAsync(CancellationToken token)
     {
@@ -151,15 +158,13 @@ public class PedestrianDestinations : MonoBehaviour
                 return;
             }
             Vector3 point = points[i];
-            List<Vector3> neighbors = tree.RadialSearch(point, maxDistanceForNeighbours);
-            foreach (var neighborPoint in neighbors)
+            tree.RadialSearch(point, maxDistanceForNeighbours, cachedNeighborList);
+            foreach (var neighborPoint in cachedNeighborList)
             {
                 if (point != neighborPoint)
                 {
-                    lock (aStar)
-                    {
                         aStar.AddNeighbour(point, neighborPoint);
-                    }
+                    
                 }
             }
 
@@ -179,13 +184,13 @@ public class PedestrianDestinations : MonoBehaviour
 
     public List<Vector3> GetNeighboursRadialSearch(Vector3 point)
     {
-        List<Vector3> neighbors = tree.RadialSearch(point, maxDistanceForNeighbours);
-        return neighbors;
+        tree.RadialSearch(point, maxDistanceForNeighbours, cachedNeighborList);
+        return cachedNeighborList;
     }
     public List<Vector3> GetNeighboursRadialSearch(Vector3 point, float distanceNeighbour)
     {
-        List<Vector3> neighbors = tree.RadialSearch(point, distanceNeighbour);
-        return neighbors;
+        tree.RadialSearch(point, distanceNeighbour, cachedNeighborList);
+        return cachedNeighborList;
     }
 
 
@@ -228,11 +233,76 @@ public class PedestrianDestinations : MonoBehaviour
     }
 
 
-
     public async Task<List<Vector3>> FindPathAsync(NodePoint start, NodePoint end, EntityType entityType, CancellationToken token)
     {
         return await aStar.FindPathAsync(start, end, tree, entityType, token);
     }
 
+
+    public void UpdateGlobalKDTree()
+    {
+        List<Vector3> allPoints = new List<Vector3>(aStar.Points.Keys);
+        if (allPoints.Count == 0)
+        {
+            tree = null; // No points left, clear the tree
+            Debug.Log("KDTree cleared as there are no more points.");
+        }
+        else
+        {
+            tree = new KDTree(allPoints);
+            Debug.Log($"Global KDTree rebuilt with {allPoints.Count} total points.");
+        }
+    }
+    public NodePoint GetNearestValidNode(Vector3 position, EntityType type, Vector2Int tile)
+    {
+        // 1. Try exact match (Fastest, but rare for a ragdoll)
+        NodePoint precisePoint = GetPoint(position);
+        if (IsValidNodeForType(precisePoint, type))
+        {
+            return precisePoint;
+        }
+
+        // 2. Radial Search using KDTree (Finds nearest neighbor)
+        // We search within 10 units. 100f from your old code is very large, 
+        // we want them to respawn reasonably close to where they fell.
+        float searchRadius = 50f;
+
+        // Safety check if tree exists
+        if (tree != null)
+        {
+
+            tree.RadialSearch(position, searchRadius, cachedNeighborList);
+
+            // Sort by distance to find the absolute closest valid point
+            // (RadialSearch doesn't guarantee sorted order)
+            cachedNeighborList.Sort((a, b) => Vector3.SqrMagnitude(a - position).CompareTo(Vector3.SqrMagnitude(b - position)));
+
+            foreach (Vector3 neighborPos in cachedNeighborList)
+            {
+                NodePoint node = GetPoint(neighborPos);
+
+                if (IsValidNodeForType(node, type))
+                {
+                    return node;
+                }
+            }
+        }
+
+        // 3. Fallback: Get a random point on the tile
+        // If they fell into the void or too far from a path, just put them somewhere safe on the tile.
+        Debug.LogWarning($"Could not find nearest neighbor for {type} at {position}. Teleporting to random node.");
+        return GetRandomNodePoint(type, tile);
+    }
+
+    // Helper to check if a node matches the entity type (Pedestrians -> Sidewalks, Cars -> Roads)
+    private bool IsValidNodeForType(NodePoint node, EntityType type)
+    {
+        if (node == null) return false;
+
+        if (type == EntityType.Pedestrian && node.Type == NodeType.Sidewalk) return true;
+        if (type == EntityType.Car && node.Type == NodeType.Road) return true; // Fixed logic here
+
+        return false;
+    }
 
 }

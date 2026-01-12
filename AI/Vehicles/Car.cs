@@ -11,7 +11,7 @@ public class Car : Pedestrian
         minDistanceForCompletion = 18f;
         entityType = EntityType.Car;
         randomSpeedMinimumOffset = 5f;
-        randomSpeedMaximumOffset = 15f;
+        randomSpeedMaximumOffset = 30f;
         base.Start();
     }
 

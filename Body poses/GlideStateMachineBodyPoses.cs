@@ -43,6 +43,7 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
     private bool isOnFloor = false;
     [SerializeField] private float flapStrentgh = 30f;
     [SerializeField] private float flapSlowStrentgh = 12f;
+    [SerializeField] private float airDrag = 2.0f; // New variable to slow down air sliding
 
     [SerializeField] private float flapSlowDownTimeStrentgh = 2f;
 
@@ -427,6 +428,8 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
     public void OnTheCollisionWithFloor()
     {
         flapVelocity = 0f;
+        hasPreservedMomentum = false;
+        preservedMomentum = Vector3.zero;
         rb.velocity = Vector3.zero;
         isOnFloor = true;
     }
@@ -592,23 +595,43 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
     private Vector3 GetStationaryVelocity()
     {
         Vector3 horizontalVelocity = Vector3.zero;
-
-        // Use preserved momentum if available, otherwise use current horizontal velocity
-        if (hasPreservedMomentum && preservedMomentum.magnitude > 0.1f)
+        if (isOnFloor)
         {
-            horizontalVelocity = preservedMomentum;
+            hasPreservedMomentum = false;
+            horizontalVelocity = Vector3.zero;
         }
         else
         {
-            horizontalVelocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
-        }
+            // 2. FIX AIR SLIDING (INFINITE MOMENTUM)
+            if (hasPreservedMomentum)
+            {
+                // Decay the preserved momentum over time so we don't glide forever
+                preservedMomentum = Vector3.Lerp(preservedMomentum, Vector3.zero, Time.deltaTime * airDrag);
 
+                horizontalVelocity = preservedMomentum;
+
+                // If momentum becomes negligible, stop tracking it
+                if (preservedMomentum.magnitude < 0.1f)
+                {
+                    hasPreservedMomentum = false;
+                }
+            }
+            else
+            {
+                // If we have no momentum (or it ran out), calculate current horizontal speed
+                Vector3 currentH = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+
+                // Apply air resistance (decay) to current velocity so we don't slide forever
+                horizontalVelocity = Vector3.Lerp(currentH, Vector3.zero, Time.deltaTime * airDrag);
+            }
+        }
         // Calculate falling behavior with delay and ease-out
         float fallSpeed = CalculateStationaryFallSpeed();
         float yVelocity = rb.velocity.y - (Time.deltaTime * fallSpeed);
         yVelocity = Mathf.Max(yVelocity, -maxStationaryFallSpeed);
 
         return new Vector3(horizontalVelocity.x, yVelocity, horizontalVelocity.z);
+
     }
     private float CalculateStationaryFallSpeed()
     {
