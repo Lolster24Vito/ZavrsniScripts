@@ -312,14 +312,14 @@ public class Pedestrian : MonoBehaviour
         path.Clear();
         pathListIndex = 0;
 
-        Debug.Log($"VITO object {gameObject.name} reached end of path, getting new path");
+        //Debug.Log($"VITO object {gameObject.name} reached end of path, getting new path");
         // Check if we have a queued path from the group leader
         if (groupSpawned && groupNextPath.Count > 0) 
         {
             path.AddRange(groupNextPath);
             SetPositionAndTeleport(path[0]); 
             groupNextPath.Clear();
-            Debug.Log($"VITO object {gameObject.name} found path because of groupNextPath");
+            //Debug.Log($"VITO object {gameObject.name} found path because of groupNextPath");
 
             return;
         }
@@ -336,7 +336,7 @@ public class Pedestrian : MonoBehaviour
         }*/
         if(!findingPath)
         {
-            Debug.Log($"VITO object {gameObject.name} not finding path is false, calling findPath");
+            //Debug.Log($"VITO object {gameObject.name} not finding path is false, calling findPath");
             pathFoundCount++;
          //   findingPath = true;
             currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);

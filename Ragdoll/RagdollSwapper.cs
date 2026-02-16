@@ -39,7 +39,7 @@ public class RagdollSwapper : MonoBehaviour
             Debug.LogWarning("VR Camera not found! Ragdoll priority system disabled.");  //  WARNING
     }
 
-    public bool SwapToRagdoll(GameObject pedestrian, float force, Vector3 contactPoint, Vector3 direction)
+    public bool SwapToRagdoll(GameObject pedestrian, float force, Vector3 contactPoint, Vector3 direction, Vector3? decalNormal = null)
     {
 
         if (pedestrian == null) return false;
@@ -85,7 +85,17 @@ public class RagdollSwapper : MonoBehaviour
         {
             ragdollComp.TriggerRagdoll(force, contactPoint, direction);
         }
+        // --- NEW: HANDLE DECAL ATTACHMENT ---
+        // We do this AFTER matching pose so the bones are in the correct hit position
+        if (decalNormal.HasValue)
+        {
+            // Find which bone on the NEW ragdoll is closest to where the bullet hit
+            Transform targetBone = GetClosestRagdollBone(ragdoll, contactPoint);
 
+            // Spawn the decal attached to that moving dynamic bone
+            DecalManager.Instance?.SpawnDecal(contactPoint, decalNormal.Value, targetBone);
+        }
+        // -------------------------------------
         // 4. Store recovery info on ragdoll
         RagdollRecovery recovery = ragdoll.AddComponent<RagdollRecovery>();
         recovery.pedestrianTile = tile;
@@ -100,6 +110,27 @@ public class RagdollSwapper : MonoBehaviour
 
         return true;
     }
+    // --- NEW HELPER METHOD ---
+    private Transform GetClosestRagdollBone(GameObject ragdoll, Vector3 hitPosition)
+    {
+        // We look for Rigidbodies because they represent the physical bones (Hips, Spine, Head, etc.)
+        // This ignores the empty container or LOD objects
+        Rigidbody[] bones = ragdoll.GetComponentsInChildren<Rigidbody>();
+
+        Transform bestBone = ragdoll.transform;
+        float closestDistSqr = Mathf.Infinity;
+
+        foreach (var rb in bones)
+        {
+            float distSqr = (rb.position - hitPosition).sqrMagnitude;
+            if (distSqr < closestDistSqr)
+            {
+                closestDistSqr = distSqr;
+                bestBone = rb.transform;
+            }
+        }
+        return bestBone;
+    }
 
     private bool TryReplaceDistantRagdoll(Vector3 newNpcPosition)
     {
@@ -113,7 +144,6 @@ public class RagdollSwapper : MonoBehaviour
         {
             float distance = Vector3.Distance(ragdoll.transform.position, playerCamera.position);
             // Check if ragdoll is farther than the current maximum AND outside the priority zone
-            //todo this is sus why do I need a second &&
             if (distance > maxDistance && distance > priorityDistance)
             {
                 maxDistance = distance;

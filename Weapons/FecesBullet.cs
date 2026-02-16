@@ -133,15 +133,18 @@ public class FecesBullet : MonoBehaviour
             ))
             {
                 //Ragdoll logic
-
+                Debug.Log("Swapping for npc collision(VITO):" + collision.gameObject.name);
                 Vector3 impactDir = (collision.transform.position - transform.position).normalized;
-
+                ContactPoint contact = collision.GetContact(0);
                 RagdollSwapper.Instance.SwapToRagdoll(
             collision.gameObject,
             ragdollImpactForce,
             collision.GetContact(0).point,
-            impactDir
+            impactDir,
+            contact.normal // <--- THIS is  for the decal!
         );
+               // SpawnDecalByCollision(collision, collision.gameObject.transform);
+
                 //old code
                 /*
                 Debug.Log(" ON COLLISION WITH Feces with ragdoll");
