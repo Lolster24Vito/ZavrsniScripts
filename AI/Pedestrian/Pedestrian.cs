@@ -71,7 +71,46 @@ public class Pedestrian : MonoBehaviour
     private float lastPathfindingTime = 0f;
 
     private CharacterController characterController;
-    private Vector3 tileManagerOffset; 
+    private Vector3 tileManagerOffset;
+
+    [Header("Gravity Settings")]
+    [Tooltip("The downward force applied to the pedestrian.")]
+    [SerializeField] private float gravityForce = -9.81f;
+
+    [Tooltip("A multiplier to adjust the strength of gravity.")]
+    [SerializeField] private float gravityMultiplier = 1.0f;
+
+    [Tooltip("The distance below the pedestrian to check for the ground.")]
+    [SerializeField] private float groundCheckDistance = 1.5f;
+
+    [Tooltip("The height above the pedestrian's feet to start the ground check raycast from.")]
+    [SerializeField] private float groundCheckOffset = 0.2f;
+
+    [Tooltip("The layer mask used to detect what is considered ground.")]
+    [SerializeField] private LayerMask groundLayerMask;
+
+    [Tooltip("The maximum distance from the player at which gravity is applied.")]
+    [SerializeField] private float gravityDistanceThreshold = 550f;
+
+    [Tooltip("The interval in seconds between gravity checks to optimize performance.")]
+    [SerializeField] private float gravityUpdateInterval = 0.1f;
+
+    [Header("LOD Settings")]
+    [Tooltip("Enable or disable tile-based Level of Detail (LOD) for performance.")]
+    [SerializeField] private bool enableTileLOD = true;
+
+    [Tooltip("The radius of active tiles around the player's tile.")]
+    [SerializeField] private int activeTileRadius = 2;
+
+    [Tooltip("A small offset to keep the pedestrian's feet from sinking into the ground when clamped.")]
+    [SerializeField] private float groundClampOffset = 0.1f;
+    // --- Private gravity State Variables ---
+    private float verticalVelocity = 0f;
+    private float nextGravityCheckTime = 0f;
+    private bool isWithinGravityRange = false;
+    private Transform playerTransform;
+    private Vector2Int playerCurrentTile;
+
 
     public void SetTile(Vector2Int setTile)
     {
@@ -112,7 +151,7 @@ public class Pedestrian : MonoBehaviour
 
 
         if (!targetWithOffset.Equals(Vector3.zero))
-            SetPositionAndTeleport(targetWithOffset); // MODIFIED
+            SetPositionAndTeleport(targetWithOffset); 
     }
 
     private void OnDisable()
@@ -127,18 +166,14 @@ public class Pedestrian : MonoBehaviour
 
     private void OnDestroy()
     {
-        //new code uncommented
-        WorldRecenterManager.OnWorldRecentered -= SetToNewestRecenterOffset;
-
-        //     pathfindingCancellationTokenSource?.Cancel();
-        //   npcCount--;
-
+        // OnDisable already handles unsubscription and cancellation.
+        // No need for code here.
 
     }
     // --- ADDED: UPDATE LOOP TO SYNC VISUALS ---
 
     // --- ADDED: SYNC VISUALS FROM DOTS TO GAME OBJECT ---
- 
+
     private void SetToNewestRecenterOffset(Vector3 offset)
     {
         currentWorldRecenterOffset -= offset;
@@ -154,6 +189,8 @@ public class Pedestrian : MonoBehaviour
     private const float PathFailureDelay = 2.0f; // 2-second delay before retrying
     protected virtual void FixedUpdate()
     {
+        CheckLODStatus();
+
         // Initialization
         if (!firstPathFindCalled && !findingPath && PedestrianDestinations.Instance.IsPathFindingReady())
         {
@@ -184,6 +221,7 @@ public class Pedestrian : MonoBehaviour
 
         // Move toward target
         MoveTowardsTarget();
+        ClampToGround();
     }
 
     private void CalculateTargetWithOffset()
@@ -215,6 +253,66 @@ public class Pedestrian : MonoBehaviour
     // Pedestrian.cs
 
     // ... (Around line 160)
+    private void CheckLODStatus()
+    {
+        if (!enableTileLOD) return;
+
+        // Find the player's transform if we don't have it.
+        if (playerTransform == null)
+        {
+            if (Camera.main != null) playerTransform = Camera.main.transform;
+            if (playerTransform == null) return; // Exit if we can't find the player
+        }
+
+        // Calculate the distance to the player.
+        // Using Vector3.Distance is fine here since it's only called once per frame per NPC.
+        float distanceToPlayer = Vector3.Distance(cachedTransform.position, playerTransform.position);
+
+        // Set the flag. This flag will be used by the gravity calculation method.
+        isWithinGravityRange = distanceToPlayer < gravityDistanceThreshold;
+    }
+    private Vector3 CalculateVerticalMovement()
+    {
+        // --- KEY CHANGE ---
+        // If the player is too far away, don't apply gravity.
+        // The NPC will effectively "float" at its current height.
+        if (!isWithinGravityRange)
+        {
+            // Reset vertical velocity so it doesn't start falling instantly when it gets close.
+            verticalVelocity = 0f;
+            return Vector3.zero; // Return no vertical movement.
+        }
+        // --- END OF KEY CHANGE ---
+
+        // If we ARE within range, proceed with normal gravity logic.
+        if (Time.time < nextGravityCheckTime)
+        {
+            return Vector3.up * verticalVelocity * Time.deltaTime;
+        }
+
+        nextGravityCheckTime = Time.time + gravityUpdateInterval;
+
+        RaycastHit hit;
+        Vector3 rayOrigin = cachedTransform.position + (Vector3.up * groundCheckOffset);
+
+        if (Physics.Raycast(rayOrigin, Vector3.down, out hit, groundCheckDistance, groundLayerMask))
+        {
+            if (hit.distance <= groundCheckOffset + 0.2f)
+            {
+                verticalVelocity = -2f; // Stick to the ground
+            }
+            else
+            {
+                verticalVelocity += (gravityForce * gravityMultiplier) * Time.deltaTime; // Fall
+            }
+        }
+        else
+        {
+            verticalVelocity += (gravityForce * gravityMultiplier) * Time.deltaTime; // Fall if nothing is below
+        }
+
+        return Vector3.up * verticalVelocity * Time.deltaTime;
+    }
 
     private bool HasReachedCurrentTarget()
     {
@@ -251,6 +349,7 @@ public class Pedestrian : MonoBehaviour
             HandlePathEndAndRefill();
         }
     }
+
     //normal MOveTowards code
     /* private void MoveTowardsTarget()
      {
@@ -273,33 +372,37 @@ public class Pedestrian : MonoBehaviour
     //gemini slop:
     private void MoveTowardsTarget()
     {
+        // Staggered start for cars. 
         if (entityType.Equals(EntityType.Car) && groupSpawned && groupIndividualWaitTime > Time.time)
             return;
 
         // Calculate direction to target WITH offset (for actual movement)
         Vector3 direction = (targetWithOffset - cachedTransform.position).normalized;
-
+        Vector3 horizontalMovement = Vector3.zero;
         // If direction is too small, don't move
-        if (direction.sqrMagnitude < 0.01f)
-            return;
+        if (direction.sqrMagnitude >= 0.01f)
+        {
+             horizontalMovement = direction * moveSpeed * Time.deltaTime;
+        }
 
         // Calculate movement
-        Vector3 movement = direction * moveSpeed * Time.deltaTime;
 
         // Use CharacterController if enabled
         if (useCharacterController && characterController != null && characterController.enabled)
         {
             // SimpleMove automatically applies gravity and is framerate-independent
+            Vector3 verticalMovement = CalculateVerticalMovement();//? todo vito test Idk?
             characterController.SimpleMove(direction * moveSpeed);
         }
         else
         {
+            Vector3 verticalMovement = CalculateVerticalMovement();
             // Direct transform movement (for cars or when CharacterController is disabled)
-            cachedTransform.position += movement;
+            cachedTransform.position += horizontalMovement + verticalMovement;
         }
 
         // Only rotate if we're actually moving a significant amount
-        if (movement.sqrMagnitude > 0.001f)
+        if (horizontalMovement.sqrMagnitude > 0.001f)
         {
             Quaternion targetRotation = Quaternion.LookRotation(direction);
             targetRotation.eulerAngles = new Vector3(0, targetRotation.eulerAngles.y, 0);
@@ -312,33 +415,17 @@ public class Pedestrian : MonoBehaviour
         path.Clear();
         pathListIndex = 0;
 
-        //Debug.Log($"VITO object {gameObject.name} reached end of path, getting new path");
         // Check if we have a queued path from the group leader
         if (groupSpawned && groupNextPath.Count > 0) 
         {
             path.AddRange(groupNextPath);
             SetPositionAndTeleport(path[0]); 
             groupNextPath.Clear();
-            //Debug.Log($"VITO object {gameObject.name} found path because of groupNextPath");
-
             return;
         }
-       /* if (pathFoundCount > 5)//&& !findingPath
-        {
-            Debug.Log($"VITO object {gameObject.name} found path over 5 times");
-
-            currentStartNodePoint = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, tile);
-            SetPositionAndTeleport(currentStartNodePoint.Position);
-            pathFoundCount = 0;
-//            currentEndTargetDestination = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, tile); //todo change
-  //          findingPath = true;
-    //        FindPath();
-        }*/
         if(!findingPath)
         {
-            //Debug.Log($"VITO object {gameObject.name} not finding path is false, calling findPath");
             pathFoundCount++;
-         //   findingPath = true;
             currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);
             currentEndTargetDestination = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, tile);
             FindPath();
@@ -346,69 +433,30 @@ public class Pedestrian : MonoBehaviour
     }
     protected void InitializePathfinding()
     {
-        /*
-        if (currentStartNodePoint == null)
-            currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);
-
-        // Only set position when we actually found a valid node
-        if (currentStartNodePoint != null)
-        {
-            SetPositionAndTeleport(currentStartNodePoint.Position);
-            //   cachedTransform.position = currentStartNodePoint.Position;
-            // SetPositionAndTeleport(currentStartNodePoint.Position); // MODIFIED
-
-        }
-        Debug.Log("Now really started pedestrian: " + gameObject.name);
-        */
         if (isEndPointOnSpawnSet)
         {
-            Debug.Log("Vito debug first if isEndPointOnSpawnSet TRUE " + gameObject.name);
             currentEndTargetDestination = GetPositionNodePoint(endPoint);
 
         }
         else
         {
-            Debug.Log("Vito debug first else isEndPointOnSpawnSet TRUE " + gameObject.name);
-
             currentEndTargetDestination = PedestrianDestinations.Instance.GetRandomNodePoint(entityType);
         }
         if (!groupSpawned)
         {
-            Debug.Log("Vito debug 2 if TRUE !groupSpawned " + gameObject.name);
-
             FindPath();
 
         }
         else
         {
-            Debug.Log("Vito debug 2 else TRUE !groupSpawned " + gameObject.name);
-
-            // If groupSpawned is true, the leader has already populated the 'path' list.
-            // We just need to sync it to DOTS and ensure the state is correct.
             currentTargetDestination = path.Count > 0 ? path[pathListIndex] : cachedTransform.position;
             firstPathFindCalled = true;
             findingPath = false;
         }
-        Debug.Log("Vito debug 3 nista TRUE " + gameObject.name);
-
-        //14_11 VITO todo old code  FindPath();
-
 
     }
     protected NodePoint GetPositionNodePoint(Vector3 position)
     {
-//        Debug.Log($"GetPositionNodePoint VITO object {gameObject.name} is getting position for {position.ToString()}");
-        //  REMOVED the following lines that added an extra offset:
-        /*
-        Vector3 tileManagerOffset;
-
-        if (TileManager.TryGetOffset(tile, out tileManagerOffset))
-        {
-            position += (WorldRecenterManager.Instance.GetCustomWorldOffsetWithoutFirst() - tileManagerOffset);
-
-
-        }*/
-
         NodePoint returnNodePoint = PedestrianDestinations.Instance.GetPoint(position);
         getPositionNodePointTransformNeighbourPoints.Clear();
 
@@ -445,7 +493,7 @@ public class Pedestrian : MonoBehaviour
 
             }
         }
-        Debug.Log($"GetPositionNodePoint VITO object {gameObject.name} return nodePoint: {returnNodePoint.ToString()}");
+      //  Debug.Log($"GetPositionNodePoint VITO object {gameObject.name} return nodePoint: {returnNodePoint.ToString()}");
 
         return returnNodePoint;
     }
@@ -628,9 +676,9 @@ public class Pedestrian : MonoBehaviour
         if (path.Count == 0 || pathListIndex >= path.Count)
         {
             this.path.Clear();
-            pathListIndex = 0;
             this.path.AddRange(resultPath);
-
+            pathListIndex = 0;
+            this.currentTargetDestination = this.path.Count > 0 ? this.path[0] : Vector3.zero; // Set the first target
         }
         else
         {
@@ -963,5 +1011,39 @@ public class Pedestrian : MonoBehaviour
         
         
     }
+    /// <summary>
+    /// Acts as a safety net to prevent the pedestrian from falling through the terrain.
+    /// This should be called after all movement has been applied.
+    /// </summary>
+    private void ClampToGround()
+    {
+        // We only need to perform this check if the pedestrian is active and within gravity range.
+        // Distant, frozen NPCs don't need to be clamped.
+        if (!isWithinGravityRange)
+        {
+            return;
+        }
 
+        // Start the raycast slightly above the character's feet.
+        Vector3 rayOrigin = cachedTransform.position + Vector3.up * groundCheckOffset;
+        RaycastHit hit;
+
+        // Cast a ray downwards. We use the existing groundCheckDistance and add a margin.
+        float rayDistance = groundCheckDistance + 1f;
+
+        if (Physics.Raycast(rayOrigin, Vector3.down, out hit, rayDistance, groundLayerMask))
+        {
+            // The ideal Y position is the hit point's Y plus our small offset.
+            float targetY = hit.point.y + groundClampOffset;
+
+            // If the character has fallen *below* the target, snap its position up.
+            // This check prevents the character from being pulled up to platforms they are just underneath.
+            if (cachedTransform.position.y < targetY)
+            {
+                Vector3 newPosition = cachedTransform.position;
+                newPosition.y = targetY;
+                cachedTransform.position = newPosition;
+            }
+        }
+    }
 }
