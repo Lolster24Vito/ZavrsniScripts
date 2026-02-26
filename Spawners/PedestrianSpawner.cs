@@ -15,8 +15,8 @@ public class PedestrianSpawner : MonoBehaviour
      private float despawnRadius = 700f;
     private float minSpawnDistance = 30f;
 
-    private static int pedestrianNumberToSpawn = 33;
-    private static int carNumberToSpawn = 33;
+    private static int pedestrianNumberToSpawn = 20;
+    private static int carNumberToSpawn = 20;
 
 
     private Transform tileContainer;
@@ -25,7 +25,6 @@ public class PedestrianSpawner : MonoBehaviour
     private float checkInterval = 1.3f; // Check every 1.3 seconds
     private float timeSinceLastCheck = 0f;
     Vector3 worldOffset = Vector3.zero;
-    [SerializeField] private bool useDOTSMovement = true;
 
     public List<GameObject> activeAgents = new List<GameObject>();
     private Transform playerTransform;

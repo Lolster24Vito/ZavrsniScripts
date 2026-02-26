@@ -11,7 +11,7 @@ public class DecalManager : MonoBehaviour
     public GameObject decalPrefab;
     public int poolDefaultCapacity = 30;
     public int poolMaxSize = 50;
-    public float decalOffset = 0.01f; //position offset to remove jittering or something like that
+    public float decalOffset = -0.1f; //position offset to remove jittering or something like that
 
     private ObjectPool<GameObject> decalPool;
 
@@ -83,7 +83,7 @@ public class DecalManager : MonoBehaviour
 
 
         // Optional: return to pool later if you want "rolling limit"
-        StartCoroutine(ReturnDecalAfterLifetime(decal, 15f));
+        StartCoroutine(ReturnDecalAfterLifetime(decal, 60));
     }
 
     private IEnumerator ReturnDecalAfterLifetime(GameObject decal, float seconds)

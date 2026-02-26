@@ -72,6 +72,7 @@ public class RagdollRecovery : MonoBehaviour
                 }
             }
         }
+        TransferDecals(gameObject, newPedestrian);
 
         // 4. Return ragdoll to pool
         NpcPoolManager.Instance.ReleaseRagdollPedestrian(gameObject);
@@ -91,5 +92,40 @@ public class RagdollRecovery : MonoBehaviour
             node = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, pedestrianTile);
         }
         return node;
+    }
+
+    private void TransferDecals(GameObject sourceRagdoll, GameObject targetPedestrian)
+    {
+        var targetBones = targetPedestrian.GetComponentsInChildren<Transform>();
+
+        // 2. Iterate through the Ragdoll's physical bones (where we attached decals)
+        Rigidbody[] ragdollBones = sourceRagdoll.GetComponentsInChildren<Rigidbody>();
+
+        foreach (var rb in ragdollBones)
+        {
+            Transform sourceBone = rb.transform;
+
+            // Check if this bone has children (potential decals)
+            if (sourceBone.childCount == 0) continue;
+
+            // Find the matching bone on the new Pedestrian
+            Transform targetBone = targetBones.FirstOrDefault(t => t.name == sourceBone.name);
+
+            if (targetBone != null)
+            {
+                // Iterate backwards because we are modifying the child list (re-parenting)
+                for (int i = sourceBone.childCount - 1; i >= 0; i--)
+                {
+                    Transform child = sourceBone.GetChild(i);
+
+
+                    if (child.CompareTag("Decal")) //player bullet layer
+                    {
+                        child.transform.SetParent(targetBone, true);
+                        child.gameObject.SetActive(true);
+                    }
+                }
+            }
+        }
     }
 }

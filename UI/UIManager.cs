@@ -10,6 +10,8 @@ public class UIManager : MonoBehaviour
     [SerializeField] GameObject LeftControllerPokeInteractor;
     [SerializeField] GameObject RightControllerPokeInteractor;
 
+    [SerializeField] bool isMainMenu = false;
+
     private bool raysEnabled = false;
 
 
@@ -17,15 +19,18 @@ public class UIManager : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
+        if(!isMainMenu)
         DisableRayInteractors();
+        else
+        {
+            EnableRayInteractors();
+        }
     }
     private void OnEnable()
     {
         GameEventsManager.Instance.inputEvents.onQuestLogTogglePressed += ToggleRayInteractors;
         GameEventsManager.Instance.dialogueEvents.onDialogueStarted += EnableRayInteractors;
         GameEventsManager.Instance.dialogueEvents.onDialogueFinished += DisableRayInteractors;
-
-
     }
 
 
