@@ -19,7 +19,7 @@ public class PedestrianSpawner : MonoBehaviour
     private static int carNumberToSpawn = 20;
 
 
-    private Transform tileContainer;
+   [HideInInspector] public Transform tileContainer;
     private bool isActive;
 
     private float checkInterval = 1.3f; // Check every 1.3 seconds

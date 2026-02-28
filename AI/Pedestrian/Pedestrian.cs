@@ -81,10 +81,10 @@ public class Pedestrian : MonoBehaviour
     [SerializeField] private float gravityMultiplier = 1.0f;
 
     [Tooltip("The distance below the pedestrian to check for the ground.")]
-    [SerializeField] private float groundCheckDistance = 1.5f;
+    [SerializeField] private float groundCheckDistance = 300f;
 
     [Tooltip("The height above the pedestrian's feet to start the ground check raycast from.")]
-    [SerializeField] private float groundCheckOffset = 0.2f;
+    [SerializeField] private float groundCheckOffset = 100f;
 
     [Tooltip("The layer mask used to detect what is considered ground.")]
     [SerializeField] private LayerMask groundLayerMask;
@@ -426,7 +426,14 @@ public class Pedestrian : MonoBehaviour
         if(!findingPath)
         {
             pathFoundCount++;
-            currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);
+            if (path.Count > 0)
+            {
+                currentStartNodePoint = GetPositionNodePoint(path[path.Count - 1]);
+            }
+            else
+            {
+                currentStartNodePoint = GetPositionNodePoint(cachedTransform.position);
+            }
             currentEndTargetDestination = PedestrianDestinations.Instance.GetRandomNodePoint(entityType, tile);
             FindPath();
         }
@@ -658,8 +665,14 @@ public class Pedestrian : MonoBehaviour
         // Convert pedestrian's current position to original world coordinates for comparison
         Vector3 myOriginalPosition = cachedTransform.position + currentWorldRecenterOffset;
 
-        float distanceToFirst = Vector3.Distance(myOriginalPosition, pathToCheck[0]);
-        float distanceToLast = Vector3.Distance(myOriginalPosition, pathToCheck[pathToCheck.Count - 1]);
+        // Account for tile manager offset if it exists
+        if (TileManager.TryGetOffset(tile, out Vector3 tileOffset))
+        {
+            myOriginalPosition -= tileOffset;
+        }
+
+        float distanceToFirst = Vector3.Distance(myOriginalPosition, pathToCheck[0]- tileOffset);
+        float distanceToLast = Vector3.Distance(myOriginalPosition, pathToCheck[pathToCheck.Count - 1]- tileOffset);
 
         // If the end of the path is significantly closer, it's likely backwards
         return distanceToLast < distanceToFirst * 0.7f;
@@ -714,7 +727,7 @@ public class Pedestrian : MonoBehaviour
             GameObject pedestrianClone = entityType == EntityType.Pedestrian
                 ? NpcPoolManager.Instance.GetPedestrian()
                 : NpcPoolManager.Instance.GetCar();
-            Debug.Log($"Got from pool: {gameObject.name}_group_num_{i}_tiles_{tile.x}_{tile.y}");
+          //  Debug.Log($"Got from pool: {gameObject.name}_group_num_{i}_tiles_{tile.x}_{tile.y}");
             //manually calling it here because pedestrian script might not be ready for  SetPositionAndTeleport 
             /*   CharacterController cloneCC = pedestrianClone.GetComponent<CharacterController>();
                if (cloneCC != null) cloneCC.enabled = false;
@@ -743,7 +756,7 @@ public class Pedestrian : MonoBehaviour
            currentStartNodePoint,
            tile
        );*/
-            Debug.Log("Setting pathfinding variables for:" + pedestrianClone.name);
+         //   Debug.Log("Setting pathfinding variables for:" + pedestrianClone.name);
 
             pedestrianScript.groupSpawned = true;
             pedestrianScript.tile = tile;
@@ -847,15 +860,17 @@ public class Pedestrian : MonoBehaviour
     {
         if (collision.gameObject.layer == LayerMask.NameToLayer("NPC"))
         {
-            Pedestrian çollidedNPC = collision.gameObject.GetComponent<Pedestrian>();
-
-            if (moveSpeed > çollidedNPC.GetMoveSpeed())
+            if (collision.gameObject.GetComponent<Pedestrian>() != null)
             {
-                currentRightOffset = localRightDirectionOffsetStrength + localRightOffsetNpcCollision;
-            }
-            else
-            {
-                currentRightOffset = localRightDirectionOffsetStrength;
+                Pedestrian çollidedNPC = collision.gameObject.GetComponent<Pedestrian>();
+                if (moveSpeed > çollidedNPC.GetMoveSpeed())
+                {
+                    currentRightOffset = localRightDirectionOffsetStrength + localRightOffsetNpcCollision;
+                }
+                else
+                {
+                    currentRightOffset = localRightDirectionOffsetStrength;
+                }
             }
         }
     }
@@ -1023,7 +1038,6 @@ public class Pedestrian : MonoBehaviour
         {
             return;
         }
-
         // Start the raycast slightly above the character's feet.
         Vector3 rayOrigin = cachedTransform.position + Vector3.up * groundCheckOffset;
         RaycastHit hit;
@@ -1033,17 +1047,21 @@ public class Pedestrian : MonoBehaviour
 
         if (Physics.Raycast(rayOrigin, Vector3.down, out hit, rayDistance, groundLayerMask))
         {
-            // The ideal Y position is the hit point's Y plus our small offset.
-            float targetY = hit.point.y + groundClampOffset;
-
-            // If the character has fallen *below* the target, snap its position up.
-            // This check prevents the character from being pulled up to platforms they are just underneath.
-            if (cachedTransform.position.y < targetY)
+            if (hit.collider.name.StartsWith("Terrain"))
             {
-                Vector3 newPosition = cachedTransform.position;
-                newPosition.y = targetY;
-                cachedTransform.position = newPosition;
+                float targetY = hit.point.y + groundClampOffset;
+
+                if (cachedTransform.position.y < targetY)
+                {
+                    Vector3 newPosition = cachedTransform.position;
+                    newPosition.y = targetY;
+                    cachedTransform.position = newPosition;
+
+                    // Reset velocity so they don't accumulate "fall speed" while stuck
+                    verticalVelocity = 0f;
+                }
             }
+
         }
     }
 }

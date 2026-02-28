@@ -9,18 +9,15 @@ public class GameEventsManager : MonoBehaviour
     public static GameEventsManager Instance { get; private set; }
 
     public event Action<FlapEventDTO> OnFlapEvent;
-    //todo experienceEvents and stuff??
-    //redo experience to seperate class for now it's just a number here
+
     public int experience;
     public QuestEvents questEvents;
     public BreadEvents breadEvents;
-    //playerMovementEvents ->EnableMovement and DisableMovement.
-    //InputEvents -> onSubmitButton, OnQuestLogButton
+
     public PlayerMovementEvents playerMovementEvents;
     public InputEvents inputEvents;
     public DialogueEvents dialogueEvents;
-   // public event Action OnSubmitButtonPressed;
-  //  public event Action OnQuestLogTogglePressed;
+
 
 
     private void Awake()
@@ -40,99 +37,59 @@ public class GameEventsManager : MonoBehaviour
 
     private void Update()
     {
-        //the time has cum.
-        //todo this is debug remove and replace with oculus controlls
-        /*if (Input.GetKeyDown(KeyCode.Space))
-        {
-            if (OnSubmitButtonPressed != null)
-            {
-                OnSubmitButtonPressed();
-            }
-        }
-        if (Input.GetKeyDown(KeyCode.J))
-        {
-            if (onQuestLogTogglePressed != null)
-            {
+        HandleShootingInput();
+        HandleGrabbingInput();
+        HandleUIInput();
 
-            }
-        }*/
+    }
+    private void HandleShootingInput()
+    {
+        // SHOOTING = INDEX TRIGGERS
+        bool leftDown = OVRInput.GetDown(OVRInput.Button.PrimaryIndexTrigger);
+        bool rightDown = OVRInput.GetDown(OVRInput.Button.SecondaryIndexTrigger);
 
-        //TODO FINISH THIS
-        //  bool leftHandTriggerDown = GetDown(Button.PrimaryHandTrigger);
-        // bool rightHandTriggerDown = GetDown(Button.SecondaryHandTrigger);
-        //bool leftHandTriggerUp = GetUp(Button.PrimaryHandTrigger);
-        //bool rightHandTriggerUp = GetUp(Button.SecondaryHandTrigger);
+        if (leftDown && rightDown) inputEvents.BothShootButtonPressedDown();
+        else if (leftDown) inputEvents.LeftShootButtonPressedDown();
+        else if (rightDown) inputEvents.RightShootButtonPressedDown();
 
-        bool leftHandTriggerDown = OVRInput.Get(OVRInput.Button.PrimaryHandTrigger);
-        bool rightHandTriggerDown = OVRInput.Get(OVRInput.Button.SecondaryHandTrigger);
-        bool leftHandTriggerUp = OVRInput.GetUp(OVRInput.Button.PrimaryHandTrigger);
-        bool rightHandTriggerUp = OVRInput.GetUp(OVRInput.Button.SecondaryHandTrigger);
-        //shoot trigger buttons
-        if (leftHandTriggerDown && rightHandTriggerDown)
+        bool leftUp = OVRInput.GetUp(OVRInput.Button.PrimaryIndexTrigger);
+        bool rightUp = OVRInput.GetUp(OVRInput.Button.SecondaryIndexTrigger);
+
+        if (leftUp && rightUp) inputEvents.BothShootButtonPressedUp();
+        else if (leftUp) inputEvents.LeftShootButtonPressedUp();
+        else if (rightUp) inputEvents.RightShootButtonPressedUp();
+    }
+
+    private void HandleGrabbingInput()
+    {
+        // GRABBING = HAND TRIGGERS (GRIPS)
+        if (OVRInput.GetDown(OVRInput.Button.PrimaryHandTrigger) || OVRInput.GetDown(OVRInput.Button.SecondaryHandTrigger))
         {
-            inputEvents.BothShootButtonPressedDown();
-        }
-        else if (leftHandTriggerDown)
-        {
-            inputEvents.LeftShootButtonPressedDown();
-        }
-        else if (rightHandTriggerDown)
-        {
-            inputEvents.RightShootButtonPressedDown();
+            inputEvents.GrabButtonPressedDown();
         }
 
-        if (leftHandTriggerUp && rightHandTriggerUp)
+        if (OVRInput.GetUp(OVRInput.Button.PrimaryHandTrigger) || OVRInput.GetUp(OVRInput.Button.SecondaryHandTrigger))
         {
-            inputEvents.BothShootButtonPressedUp();
-        }
-        else if (leftHandTriggerUp)
-        {
-            inputEvents.LeftShootButtonPressedUp();
-        }
-        else if (rightHandTriggerUp)
-        {
-            inputEvents.RightShootButtonPressedUp();
-        }
-
-        //UI buttons
-        if (Input.GetKeyDown(KeyCode.J))
-        {
-            Debug.Log("J was pressed");
-            inputEvents.QuestLogTogglePressed();
-        }
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            Debug.Log("Space was pressed");
-            inputEvents.SubmitButtonPressed();
-        }
-        if (OVRInput.GetDown(OVRInput.Button.PrimaryHandTrigger))
-        {
-            Debug.Log("Space was pressed");
-            inputEvents.SubmitButtonPressed();
-        }
-        if (OVRInput.GetDown(OVRInput.Button.One))
-        {
-            Debug.Log("Space was pressed");
-            inputEvents.SubmitButtonPressed();
-        }
-        if (OVRInput.GetDown(OVRInput.Button.Three))
-        {
-            Debug.Log("Space was pressed");
-            inputEvents.SubmitButtonPressed();
-        }
-        if (OVRInput.GetDown(OVRInput.Button.Four)) //y button left controller upper button
-        {
-            //y button
-            Debug.Log("J was pressed");
-            inputEvents.QuestLogTogglePressed();
-        }
-        if (OVRInput.GetDown(OVRInput.Button.Two)) //b button right controller upper button
-        {
-            //b button
-            Debug.Log("J was pressed");
-            inputEvents.QuestLogTogglePressed();
+            inputEvents.GrabButtonPressedUp();
         }
     }
+
+    private void HandleUIInput()
+    {
+        // PAUSE = Menu Button (Left Controller)
+        if (OVRInput.GetDown(OVRInput.Button.Start))
+            inputEvents.PauseMenuTogglePressed();
+
+        // QUEST LOG = Y or B
+        if (OVRInput.GetDown(OVRInput.Button.Four) || OVRInput.GetDown(OVRInput.Button.Two))
+            inputEvents.QuestLogTogglePressed();
+
+        // SUBMIT = A or X
+        if (OVRInput.GetDown(OVRInput.Button.One) || OVRInput.GetDown(OVRInput.Button.Three))
+            inputEvents.SubmitButtonPressed();
+    }
+
+
     public void TriggerFlapEvent(FlapEventDTO eventData)
     {
         if (OnFlapEvent != null)

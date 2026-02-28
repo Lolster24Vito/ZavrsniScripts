@@ -9,7 +9,11 @@ public class InputEvents
         this.inputEventContext = newContext;
     }
     public event Action onQuestLogTogglePressed;
+    public event Action onPauseMenuTogglePressed;
     public event Action<InputEventContext> onSubmitButtonPressed;
+
+    public event Action onGrabButtonPressedDown;
+    public event Action onGrabButtonPressedUp; 
 
     public event Action<ShootTypes> onLeftShootButtonPressedDown;
     public event Action<ShootTypes> onRightShootButtonPressedDown;
@@ -19,7 +23,13 @@ public class InputEvents
     public event Action<ShootTypes> onLeftShootButtonPressedUp;
     public event Action<ShootTypes> onRightShootButtonPressedUp;
     public event Action<ShootTypes> onBothShootButtonPressedUp;
-    
+
+
+    // --- Invocation Methods ---
+    public void GrabButtonPressedDown() => onGrabButtonPressedDown?.Invoke();
+    public void GrabButtonPressedUp() => onGrabButtonPressedUp?.Invoke();
+    public void PauseMenuTogglePressed() => onPauseMenuTogglePressed?.Invoke();
+
     public void LeftShootButtonPressedDown()
     {
         onLeftShootButtonPressedDown?.Invoke(ShootTypes.LEFT);

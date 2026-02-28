@@ -101,6 +101,9 @@ public class Ragdoll : MonoBehaviour
     }
     private void EnableRagdoll()
     {
+        ragdollState = RagdollState.Ragdoll;
+        timeToWakeUp = ragdollDuration;
+
         foreach (Rigidbody rigidbody in ragdollRigidbodies)
         {
             rigidbody.isKinematic = false;
@@ -118,9 +121,7 @@ public class Ragdoll : MonoBehaviour
         characterController.enabled = false;
                         }
 
-        ragdollState = RagdollState.Ragdoll;
         pedestrian.enabled = false;
-        timeToWakeUp = ragdollDuration;
     }
     private void AlignPositionToHips()
     {

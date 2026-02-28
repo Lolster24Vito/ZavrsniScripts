@@ -11,7 +11,7 @@ public class DecalManager : MonoBehaviour
     public GameObject decalPrefab;
     public int poolDefaultCapacity = 30;
     public int poolMaxSize = 50;
-    public float decalOffset = -0.1f; //position offset to remove jittering or something like that
+    public float decalOffset = 0.1f; //position offset to remove jittering or something like that
 
     private ObjectPool<GameObject> decalPool;
 
@@ -68,10 +68,17 @@ public class DecalManager : MonoBehaviour
             decal = CreateDecal();
             if (decal != null) decal.SetActive(true);
         }
-        decal.transform.SetParent(parent, worldPositionStays: true);
+         decal.transform.SetParent(parent, worldPositionStays: true);
+         decal.transform.SetParent(parent);
+        // Use a tiny positive offset to stay on top of the surface, 
+        // OR a negative one if you want it to "sink" into thick colliders.
+        // Given your issue, a small negative offset (sinking) helps hide collider gaps.
+        Vector3 worldPos = position + (normal * decalOffset);
 
-        decal.transform.position = position + normal * decalOffset;
-       // decal.transform.rotation = Quaternion.LookRotation(normal);
+            decal.transform.position = worldPos;
+        
+        //   decal.transform.position = position + normal * decalOffset;
+        // decal.transform.rotation = Quaternion.LookRotation(normal);
         // Compute rotation so quad faces outwards, is flipped 180° on X, and has a random spin around normal
         float randomSpin = Random.Range(0f, 360f);
         Quaternion baseRot = Quaternion.LookRotation(normal);              // align +Z to surface normal

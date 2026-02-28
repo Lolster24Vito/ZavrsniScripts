@@ -111,57 +111,72 @@ public class FecesBullet : MonoBehaviour
 
         // Schedule return after a short delay so player sees bounce/impact
         ScheduleReturn(postImpactDelay);
+        GameObject hitObj = collision.gameObject;
+        int layer = hitObj.layer;
+        ContactPoint contact = collision.GetContact(0);
+        Vector3 impactDir = (hitObj.transform.position - transform.position).normalized;
+
+        if (hitObj.CompareTag("Car"))
+        {
+            VehicleHitHandler vehicle = hitObj.GetComponent<VehicleHitHandler>();
+            if (vehicle != null) vehicle.RegisterHit();
+            DecalManager.Instance?.SpawnDecal(contact.point, contact.normal, hitObj.transform);
+            //SpawnDecalByCollision(collision);
+            hasCollided = true;
+            return;
+        }
+
+        if (layer == LayerMask.NameToLayer("NPC"))
+        {
+            bool swapSuccess = RagdollSwapper.Instance.SwapToRagdoll(
+                hitObj,
+                ragdollImpactForce,
+                contact.point,
+                impactDir,
+                contact.normal
+            );
+
+            // If swap failed (e.g., max ragdolls reached), just stick a decal on the pedestrian
+           /* if (!swapSuccess)
+            {
+                SpawnDecalByCollision(collision, hitObj.transform);
+            }*/
+
+            hasCollided = true;
+            return;
+        }
+        if (layer == LayerMask.NameToLayer("NPC_Ragdoll"))
+        {
+            // Stick decal to the specific bone transform (collision.transform)
+            DecalManager.Instance?.SpawnDecal(contact.point, contact.normal, hitObj.transform);
+            //  SpawnDecalByCollision(collision, hitObj.transform);
+
+            // Apply physical impact to the bone
+            if (collision.rigidbody != null)
+            {
+                collision.rigidbody.AddForceAtPosition(impactDir * ragdollImpactForce, contact.point, ForceMode.Impulse);
+                // SPECIAL: If they were standing up, force them back to full ragdoll
+                Ragdoll r = hitObj.GetComponentInParent<Ragdoll>();
+                if (r != null && r.GetRagdollState() == Ragdoll.RagdollState.StandingUp)
+                {
+                    r.TriggerRagdoll(ragdollImpactForce, contact.point, impactDir);
+                }
+            }
+
+            hasCollided = true;
+            return;
+        }
+
         if (!hasCollided)
         {
             hasCollided = true;
             rb.useGravity = true;
-            if (collision.gameObject.tag.Equals("Car"))
+            if (Time.time - lastDecalTime > decalCooldown)
             {
-
-                VehicleHitHandler vehicle = collision.gameObject.GetComponent<VehicleHitHandler>();
-                if (vehicle != null)
-                {
-                    vehicle.RegisterHit();
-                    SpawnDecalByCollision(collision); // Just a decal for cars
-                    return;
-                }
-
+                DecalManager.Instance?.SpawnDecal(contact.point, contact.normal, hitObj.transform);
+                lastDecalTime = Time.time;
             }
-            else
-            if ((collision.gameObject.layer == LayerMask.NameToLayer("NPC") ||
-            collision.gameObject.layer == LayerMask.NameToLayer("NPC_Ragdoll")
-            ))
-            {
-                //Ragdoll logic
-                Debug.Log("Swapping for npc collision(VITO):" + collision.gameObject.name);
-                Vector3 impactDir = (collision.transform.position - transform.position).normalized;
-                ContactPoint contact = collision.GetContact(0);
-                RagdollSwapper.Instance.SwapToRagdoll(
-            collision.gameObject,
-            ragdollImpactForce,
-            collision.GetContact(0).point,
-            impactDir,
-            contact.normal // <--- THIS is  for the decal!
-        );
-               // SpawnDecalByCollision(collision, collision.gameObject.transform);
 
-                //old code
-                /*
-                Debug.Log(" ON COLLISION WITH Feces with ragdoll");
-                //forceDirection and flapVelocity get through 
-                Ragdoll collisionRagdoll = collision.gameObject.GetComponentInParent<Ragdoll>();
-                if (collisionRagdoll != null)
-                {
-                    Transform parentDecals = collisionRagdoll.TriggerRagdoll(ragdollImpactForce, collision.GetContact(0).point, direction);
-                    SpawnDecalByCollision(collision, parentDecals) ;
-                }
-                SpawnDecalByCollision(collision,collision.gameObject.transform);
-                */
-            }
-            else
-            {
-                SpawnDecalByCollision(collision);
-            }
         }
 
         //this is sus
@@ -183,6 +198,7 @@ public class FecesBullet : MonoBehaviour
             {
                 parent = collision.transform;
             }
+            Vector3 adjustedPoint = contact.point - (contact.normal * 0.05f);
             DecalManager.Instance?.SpawnDecal(contact.point, contact.normal, parent);
             lastDecalTime = Time.time;
 

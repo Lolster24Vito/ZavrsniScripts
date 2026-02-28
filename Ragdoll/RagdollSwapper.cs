@@ -44,6 +44,7 @@ public class RagdollSwapper : MonoBehaviour
 
         if (pedestrian == null) return false;
 
+
         Pedestrian pedScript = pedestrian.GetComponent<Pedestrian>();
         if (pedScript == null) return false;
 

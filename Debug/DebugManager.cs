@@ -66,37 +66,55 @@ public class DebugManager : MonoBehaviour
 
         AddSpacing();
     }
-
     private void DrawSpawnersSection()
     {
         PedestrianSpawner[] allSpawners = FindObjectsOfType<PedestrianSpawner>(true);
         if (allSpawners.Length == 0) return;
 
-        DrawSectionHeader($"SPAWNERS ({allSpawners.Length})");
+        // Totals for the whole world
+        int totalPeds = 0;
+        int totalCars = 0;
+        int activeSpawners = 0;
 
-        int activeCount = 0;
+        // First pass: Calculate totals
         foreach (var spawner in allSpawners)
         {
             if (spawner != null && spawner.isActiveAndEnabled)
             {
-                activeCount++;
-                string entityName = spawner.entityType == EntityType.Pedestrian ? "Ped" : "Car";
-                DrawLabel($"  {entityName}: {spawner.activeAgents.Count} agents", indent: 10);
+                activeSpawners++;
+                // We use GetChildCount() because clones are children of the tileContainer
+                // but might not be in the spawner's internal 'activeAgents' list.
+                int count = (spawner.tileContainer != null) ? spawner.tileContainer.childCount : 0;
 
-                // Optional: Show more details
-                if (showNPCs && spawner.activeAgents.Count > 0)
+                if (spawner.entityType == EntityType.Pedestrian) totalPeds += count;
+                else totalCars += count;
+            }
+        }
+
+        DrawSectionHeader($"NPC TOTALS (Spawners Active: {activeSpawners})");
+        DrawLabel($"Total Pedestrians: {totalPeds}", indent: 10);
+        DrawLabel($"Total Cars: {totalCars}", indent: 10);
+        DrawLabel($"Combined: {totalPeds + totalCars}", indent: 10);
+
+        AddSpacing();
+
+        if (showNPCs)
+        {
+            DrawSectionHeader("SPAWNER BREAKDOWN");
+            foreach (var spawner in allSpawners)
+            {
+                if (spawner != null && spawner.isActiveAndEnabled)
                 {
-                    DrawLabel($"    Tile: {spawner.currentTile}", indent: 20);
-                    DrawLabel($"    Offset: {spawner.WorldOffset}", indent: 20);
+                    int childCount = (spawner.tileContainer != null) ? spawner.tileContainer.childCount : 0;
+                    string type = spawner.entityType == EntityType.Pedestrian ? "PED" : "CAR";
+
+                    // Format: [PED] Tile (4,1): 32 NPCs
+                    DrawLabel($"[{type}] Tile {spawner.currentTile}: {childCount} NPCs", indent: 10);
                 }
             }
         }
 
-        if (activeCount == 0)
-        {
-            DrawLabel("No active spawners");
-        }
-
+        if (activeSpawners == 0) DrawLabel("No active spawners");
         AddSpacing();
     }
 

@@ -40,6 +40,7 @@ public class TileManager : MonoBehaviour
     private Vector3 tileCenter;
     private string currentTileScene; // Current tile the player is on
     [SerializeField] private int maxOpenScenes = 4;
+    [SerializeField] private float lookaheadOffset = 1200f;
 
     // track the offset from the time  it is spawned  and use that for the pedestrian calculation of the path  because of world relocation due to floating origin point.
 
@@ -96,7 +97,6 @@ public class TileManager : MonoBehaviour
     public static void SetOffset(Vector3 offset, Vector2Int tile)
     {
         EntityWorldRecenterOffsets[tile] = offset;
-        Debug.Log($"VITO Set offset {offset} for tile {tile}");
     }
 
     public static bool TryGetOffset(Vector2Int tile, out Vector3 offset)
@@ -167,6 +167,19 @@ public class TileManager : MonoBehaviour
             Vector2Int playerTileCoords = PlayerOnTile;
             Vector2 playerPos2D = new Vector2(player.position.x, player.position.z);
             worldOffset = WorldRecenterManager.Instance.GetRecenterOffset();
+            // Calculate 4 directional points 100 units apart based on player's orientation
+            Vector2 playerForward2D = new Vector2(player.forward.x, player.forward.z).normalized * lookaheadOffset;
+            Vector2 playerRight2D = new Vector2(player.right.x, player.right.z).normalized * lookaheadOffset;
+
+            // Array of points to check (Center, Forward, Back, Right, Left)
+            Vector2[] checkPoints = new Vector2[]
+            {
+                playerPos2D,
+                playerPos2D + playerForward2D,
+                playerPos2D - playerForward2D,
+                playerPos2D + playerRight2D,
+                playerPos2D - playerRight2D
+            };
 
             // --- 1. ALWAYS LOAD PLAYER'S TILE FIRST ---
             if (!loadedTiles[playerTileCoords])
@@ -191,16 +204,20 @@ public class TileManager : MonoBehaviour
                     Vector2Int tile = new Vector2Int(x, y);
 
                     if (loadedTiles[tile]) continue;
+                    // Get the minimum edge distance from all 5 check points
+                    float edgeDistance = float.MaxValue;
+                    for (int i = 0; i < checkPoints.Length; i++)
+                    {
+                        float dist = GetEdgeDistanceWithOffset(checkPoints[i], tile, worldOffset);
+                        if (dist < edgeDistance)
+                        {
+                            edgeDistance = dist;
+                        }
+                    }
 
-                    //THIS COMMENT IS FALSE.
-                    // Calculate tile corner (not center!) for DistanceToTile
-                    float edgeDistance = GetEdgeDistanceWithOffset(playerPos2D, tile, worldOffset);
+                    //float edgeDistance = GetEdgeDistanceWithOffset(playerPos2D, tile, worldOffset);
 
-                  //  Vector3 tileCorner = startPos - worldOffset - new Vector3(tile.x * tileWidth, player.position.y, tile.y * tileHeight);
-                  //  Vector2 tileCorner2D = new Vector2(tileCorner.x, tileCorner.z);
 
-                    // Calculate EDGE distance (distance from player to tile's edge)
-                  //  float edgeDistance = DistanceToTile(playerPos2D, tileCorner2D, tileWidth, tileHeight);
 
                     // Only queue tiles within load radius
                     if (edgeDistance <= loadRadius)
@@ -244,12 +261,10 @@ public class TileManager : MonoBehaviour
                   float edgeDist = DistanceToTile(playerPos2D, tileCorner2D, tileWidth, tileHeight);
                 */
                 float edgeDist = GetEdgeDistanceWithOffset(playerPos2D, kvp.Key, worldOffset);
-
                 // Unload if edge is beyond unload radius
                 if (edgeDist > unloadRadius)
                 {
                     tilesToUnload.Add(kvp.Key);
-                    Debug.Log($"Marking {kvp.Key} for unload - Edge distance: {edgeDist} > {unloadRadius}");
                 }
             }
 
@@ -288,13 +303,11 @@ public class TileManager : MonoBehaviour
             // --- 6. EXECUTE UNLOADS ---
             foreach (Vector2Int tile in tilesToUnload)
             {
-                Debug.Log($"Unloading tile: {tile}");
                 loadedTiles[tile] = false;
                 StartCoroutine(UnloadTile(tile));
             }
 
             // Debug: Print current state
-            Debug.Log($"Tile state - Loaded: {loadedCount}/{maxOpenScenes}, Player on: {playerTileCoords}");
 
             yield return new WaitForSeconds(1f);
         }
@@ -413,7 +426,7 @@ public class TileManager : MonoBehaviour
             {
                 previousPlayerTile = PlayerOnTile;
 
-                Debug.Log($"[TileManager] Player moved to a new tile: {PlayerOnTile}");
+               // Debug.Log($"[TileManager] Player moved to a new tile: {PlayerOnTile}");
 
                 OnPlayerTileChanged?.Invoke(PlayerOnTile);
             }
@@ -450,7 +463,6 @@ public class TileManager : MonoBehaviour
         {
             loadedTiles[tile] = true;
             sceneHandles[tile] = loadOperation;
-            Debug.Log($"[Addressables] Loaded {address}");
 
             // NOTE: ObjectOffsetter.Awake() handles the positioning here automatically.
         }
