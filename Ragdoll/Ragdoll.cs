@@ -18,7 +18,7 @@ public class Ragdoll : MonoBehaviour
     private Collider[] rigColliders;
     private Animator animator;
     private CharacterController characterController;
-   [HideInInspector] public Transform hipsBone;
+    [HideInInspector] public Transform hipsBone;
     private Pedestrian pedestrian;
     private CapsuleCollider capsuleCollider;
 
@@ -27,9 +27,9 @@ public class Ragdoll : MonoBehaviour
     private float timeToWakeUp = 0f;
     private RagdollState ragdollState;
 
-    public RagdollState GetRagdollState() 
+    public RagdollState GetRagdollState()
     {
-        return ragdollState; 
+        return ragdollState;
     }
 
     void Awake()
@@ -93,9 +93,9 @@ public class Ragdoll : MonoBehaviour
         }
         capsuleCollider.enabled = true;
         animator.enabled = true;
-        if(characterController!=null)
+        if (characterController != null)
         {
-        characterController.enabled = true;
+            characterController.enabled = true;
         }
         ragdollState = RagdollState.Walking;
     }
@@ -115,11 +115,11 @@ public class Ragdoll : MonoBehaviour
         capsuleCollider.enabled = false;
 
         animator.enabled = false;
-                if(characterController!=null)
-                {
-                
-        characterController.enabled = false;
-                        }
+        if (characterController != null)
+        {
+
+            characterController.enabled = false;
+        }
 
         pedestrian.enabled = false;
     }
@@ -133,7 +133,7 @@ public class Ragdoll : MonoBehaviour
         }
         hipsBone.position = originalHipsPosition;
     }
-    private void StandingUpBehaviour() 
+    private void StandingUpBehaviour()
     {
         if (animator.GetCurrentAnimatorStateInfo(0).IsName(standUpStateName) == false)
         {
