@@ -273,18 +273,12 @@ public class Pedestrian : MonoBehaviour
     }
     private Vector3 CalculateVerticalMovement()
     {
-        // --- KEY CHANGE ---
-        // If the player is too far away, don't apply gravity.
-        // The NPC will effectively "float" at its current height.
         if (!isWithinGravityRange)
         {
-            // Reset vertical velocity so it doesn't start falling instantly when it gets close.
             verticalVelocity = 0f;
             return Vector3.zero; // Return no vertical movement.
         }
-        // --- END OF KEY CHANGE ---
 
-        // If we ARE within range, proceed with normal gravity logic.
         if (Time.time < nextGravityCheckTime)
         {
             return Vector3.up * verticalVelocity * Time.deltaTime;
@@ -299,16 +293,20 @@ public class Pedestrian : MonoBehaviour
         {
             if (hit.distance <= groundCheckOffset + 0.2f)
             {
-                verticalVelocity = -2f; // Stick to the ground
+                verticalVelocity = 0f;
+                Vector3 pos = cachedTransform.position;
+                pos.y = hit.point.y + groundClampOffset;
+                cachedTransform.position = pos;
+                return Vector3.zero;
             }
             else
             {
-                verticalVelocity += (gravityForce * gravityMultiplier) * Time.deltaTime; // Fall
+                verticalVelocity += (gravityForce * gravityMultiplier) * Time.fixedDeltaTime; // Fall
             }
         }
         else
         {
-            verticalVelocity += (gravityForce * gravityMultiplier) * Time.deltaTime; // Fall if nothing is below
+            verticalVelocity += (gravityForce * gravityMultiplier) * Time.fixedDeltaTime;
         }
 
         return Vector3.up * verticalVelocity * Time.deltaTime;
@@ -369,7 +367,6 @@ public class Pedestrian : MonoBehaviour
              cachedTransform.rotation = Quaternion.Slerp(cachedTransform.rotation, targetRot, rotationSpeed * Time.deltaTime);
          }
      }*/
-    //gemini slop:
     private void MoveTowardsTarget()
     {
         // Staggered start for cars. 
@@ -1032,8 +1029,6 @@ public class Pedestrian : MonoBehaviour
     /// </summary>
     private void ClampToGround()
     {
-        // We only need to perform this check if the pedestrian is active and within gravity range.
-        // Distant, frozen NPCs don't need to be clamped.
         if (!isWithinGravityRange)
         {
             return;
@@ -1047,8 +1042,7 @@ public class Pedestrian : MonoBehaviour
 
         if (Physics.Raycast(rayOrigin, Vector3.down, out hit, rayDistance, groundLayerMask))
         {
-            if (hit.collider.name.StartsWith("Terrain"))
-            {
+
                 float targetY = hit.point.y + groundClampOffset;
 
                 if (cachedTransform.position.y < targetY)
@@ -1060,7 +1054,7 @@ public class Pedestrian : MonoBehaviour
                     // Reset velocity so they don't accumulate "fall speed" while stuck
                     verticalVelocity = 0f;
                 }
-            }
+            
 
         }
     }

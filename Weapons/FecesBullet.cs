@@ -179,30 +179,7 @@ public class FecesBullet : MonoBehaviour
 
         }
 
-        //this is sus
-        // Dampen motion slightly to show impact (still allow bounce/roll)
-        // rb.velocity *= 0.45f;
 
-
-    }
-
-    private void SpawnDecalByCollision(Collision collision, Transform parent = null)
-    {
-        if (Time.time - lastDecalTime > decalCooldown)
-        {
-            // Spawn bullet decal via manager
-            ContactPoint contact = collision.GetContact(0);
-            Transform finalParent = collision.transform;
-
-            if (parent == null)
-            {
-                parent = collision.transform;
-            }
-            Vector3 adjustedPoint = contact.point - (contact.normal * 0.05f);
-            DecalManager.Instance?.SpawnDecal(contact.point, contact.normal, parent);
-            lastDecalTime = Time.time;
-
-        }
     }
 
     // Reset on exit so future OnCollisionEnter with other surfaces will run again

@@ -68,28 +68,18 @@ public class DecalManager : MonoBehaviour
             decal = CreateDecal();
             if (decal != null) decal.SetActive(true);
         }
-         decal.transform.SetParent(parent, worldPositionStays: true);
-         decal.transform.SetParent(parent);
-        // Use a tiny positive offset to stay on top of the surface, 
-        // OR a negative one if you want it to "sink" into thick colliders.
-        // Given your issue, a small negative offset (sinking) helps hide collider gaps.
+        float randomSpin = Random.Range(0f, 360f);
+        Quaternion baseRot = Quaternion.LookRotation(normal);
+        Quaternion flipX = Quaternion.Euler(180f, 0f, 0f);
+        Quaternion spin = Quaternion.AngleAxis(randomSpin, normal);
+        Quaternion finalRot = spin * (baseRot * flipX);
         Vector3 worldPos = position + (normal * decalOffset);
 
-            decal.transform.position = worldPos;
+        decal.transform.position = worldPos;
+        decal.transform.rotation = finalRot;
+
+        decal.transform.SetParent(parent, true);
         
-        //   decal.transform.position = position + normal * decalOffset;
-        // decal.transform.rotation = Quaternion.LookRotation(normal);
-        // Compute rotation so quad faces outwards, is flipped 180° on X, and has a random spin around normal
-        float randomSpin = Random.Range(0f, 360f);
-        Quaternion baseRot = Quaternion.LookRotation(normal);              // align +Z to surface normal
-        Quaternion flipX = Quaternion.Euler(180f, 0f, 0f);                 // flip on X-axis
-        Quaternion spin = Quaternion.AngleAxis(randomSpin, normal);        // spin around the hit normal
-
-        // Order matters: base → flip → spin
-        decal.transform.rotation = spin * (baseRot * flipX);
-
-
-        // Optional: return to pool later if you want "rolling limit"
         StartCoroutine(ReturnDecalAfterLifetime(decal, 60));
     }
 

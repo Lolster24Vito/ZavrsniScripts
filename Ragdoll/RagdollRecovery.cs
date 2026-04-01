@@ -98,14 +98,12 @@ public class RagdollRecovery : MonoBehaviour
     {
         var targetBones = targetPedestrian.GetComponentsInChildren<Transform>();
 
-        // 2. Iterate through the Ragdoll's physical bones (where we attached decals)
         Rigidbody[] ragdollBones = sourceRagdoll.GetComponentsInChildren<Rigidbody>();
 
         foreach (var rb in ragdollBones)
         {
             Transform sourceBone = rb.transform;
 
-            // Check if this bone has children (potential decals)
             if (sourceBone.childCount == 0) continue;
 
             // Find the matching bone on the new Pedestrian
@@ -121,7 +119,19 @@ public class RagdollRecovery : MonoBehaviour
 
                     if (child.CompareTag("Decal")) //player bullet layer
                     {
-                        child.transform.SetParent(targetBone, true);
+                        // CAPTURE local data before moving
+                        Vector3 localPos = child.localPosition;
+                        Quaternion localRot = child.localRotation;
+                        Vector3 localScale = child.localScale;
+
+                        // MOVE to new parent (false = don't try to stay in world space)
+                        child.SetParent(targetBone, false);
+
+                        // RE-APPLY local data
+                        child.localPosition = localPos;
+                        child.localRotation = localRot;
+                        child.localScale = localScale;
+
                         child.gameObject.SetActive(true);
                     }
                 }
