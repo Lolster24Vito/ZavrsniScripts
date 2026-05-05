@@ -40,7 +40,7 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
 
 
     public float flapVelocity = 0f;
-    private bool isOnFloor = false;
+    public bool isOnFloor = false;
     [SerializeField] private float flapStrentgh = 30f;
     [SerializeField] private float flapSlowStrentgh = 12f;
     [SerializeField] private float airDrag = 2.0f; // New variable to slow down air sliding
@@ -242,12 +242,13 @@ public class GlideStateMachineBodyPoses : MonoBehaviour, IRagdollInfoGetter
 
 
         flapVelocity = GetAngleSpeedOfFlapVelocity(averageDirection);
-
-        //ANGLE BASED VELOCITY END
-        appliedForce = GetVelocity(averageDirection);
-        Vector3 velocityChange = appliedForce - rb.velocity;
-        rb.AddForce(velocityChange, ForceMode.VelocityChange);
-
+        if (!isOnFloor || flapVelocity > 0.1f)
+        {
+            //ANGLE BASED VELOCITY END
+            appliedForce = GetVelocity(averageDirection);
+            Vector3 velocityChange = appliedForce - rb.velocity;
+            rb.AddForce(velocityChange, ForceMode.VelocityChange);
+        }
 
     }
     private void HandleStateTransition(FlyingStatesEnum fromState, FlyingStatesEnum toState)
